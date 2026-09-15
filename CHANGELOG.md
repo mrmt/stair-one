@@ -1,6 +1,6 @@
 # Changelog
 
-## 未リリース
+## v0.1
 
 - **スライダを丸いつまみにし、画面の左に置いた** — 2列×4行の8個 (左列 attack / decay / release / pitch、右列 delay time / delay feedback / delay mix / phaser)。
   distortion と volume は下に小さく残した。縦ドラッグ / ホイール / ダブルクリックで既定値。実体の range input を透明で重ねてあるので、キーボード操作と MIDI 割当はそのまま使える
@@ -13,8 +13,6 @@
   パッドは note / CC (ボタン型)、スライダは CC。割当は `localStorage` (`stair-one.midi.v1`) に保存し、次回も有効。
   learn 中は `Delete` で解除、`clear all` で全解除、`Esc` で抜ける。Web MIDI 非対応ブラウザではボタンを無効にする
 - **タイトルの左にアイコンを置き、親ディレクトリ (`../`) へのリンクにした** — elevator-one / elevator-two と同じ SVG を `index.html` に直書き (`header a.home`)
-
-## v0.1
 
 - 最初の版。4x4 の16パッド、押している間だけ鳴る
 - 音源: 32′/16′/8′/4′ の矩形・ノコギリ波の複数本デチューン、ホワイトノイズ、カープラス・ストロング (くし形共鳴)、グラニュラー (テープ wow / flutter、逆再生)
