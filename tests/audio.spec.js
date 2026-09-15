@@ -89,6 +89,19 @@ test('発音中もパラメータが揺れる', async ({ page }) => {
   expect(a).not.toBe(b);
 });
 
+test('フィードバックを最大にしてもループが発散しない', async ({ page }) => {
+  test.setTimeout(40000);
+  // Chrome は BiquadFilter の状態が非有限になると警告を出す。発散の検出に使う
+  let bad = 0;
+  page.on('console', m => { if (/state is bad/.test(m.text())) bad++; });
+  await page.locator('#s_dfb').fill('92');
+  await page.locator('#s_dmix').fill('100');
+  // くし形共鳴を持つパッドとカオス
+  await page.evaluate(() => [8, 9, 14, 15].forEach(i => window.stair.press(i, 'test')));
+  await page.waitForTimeout(12000);
+  expect(bad).toBe(0);
+});
+
 test('音量・歪み最大で16パッド同時押しでもクリップしない', async ({ page }) => {
   await page.locator('#s_volume').fill('100');
   await page.locator('#s_drive').fill('100');

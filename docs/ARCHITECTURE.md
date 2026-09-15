@@ -14,6 +14,14 @@ Voice × n ─→ voiceBus
   → DynamicsCompressor → master(volume) → tanh ソフトクリップ(±0.95) → destination
 ```
 
+### フィードバックループの注意
+
+BiquadFilter の lowpass は Q が **dB 指定**で、既定値 1 だとカットオフ付近に約 1.12 倍の山がある。
+ループ内に既定 Q の LPF を置くと、フィードバック 0.9 前後でもループ利得が 1 を超えて発散し、
+下流の BiquadFilter が `state is bad` 警告を出して壊れる。karplus とステレオディレイの LPF は `Q = -6` で山を消し、
+karplus はさらにループ内に傾き 1 の tanh を置いて振幅の上限を保証している。
+`tests/audio.spec.js` の「フィードバックを最大にしてもループが発散しない」がこの警告を検出する。
+
 `AudioContext` は最初のパッド押下 (ユーザー操作) で `ensureAudio()` が作る。演奏開始ボタンはない。
 BitCrusher の Worklet 読み込みは非同期なので、読み込み完了までは dry だけが通る。
 
@@ -36,7 +44,7 @@ layers → VCF (Biquad 1段 or 同一設定2段直列) → amp (ゆらぎ) → v
 | --- | --- |
 | `osc` | `count` 本の Oscillator を `spread` cent ずつずらす。1本ごとに別設定の LFO が detune にかかる |
 | `noise` | ループするホワイトノイズ。LFO は音量にかかる (チョップ / トレモロ) |
-| `karplus` | ノイズ励起 → DelayNode(1/f) → LPF → feedback。`pluck` 回/秒で励起を叩く。ループ内の遅延は最低 128 サンプルになるので f は 300Hz で頭打ち |
+| `karplus` | ノイズ励起 → DelayNode(1/f) → LPF → tanh → feedback。`pluck` 回/秒で励起を叩く。ループ内の遅延は最低 128 サンプルになるので f は 300Hz で頭打ち |
 | `grain` | 生成済みの汚いテープ素材 (正/逆) から短い断片を窓付きで散布。wow / flutter の LFO を各粒の detune に配る |
 
 ### 音程

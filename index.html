@@ -330,6 +330,8 @@ const SCALES = {
   fifths: [0, 7], dim: [0, 3, 6, 9], odd: [0, 1, 6, 11],
 };
 const C0 = 16.3516;
+// フィードバックループ用の飽和カーブ。原点の傾きを 1 に保ち (ループ利得を上げない)、±1 超は端で頭打ち
+const SAT_CURVE = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh(i / 512 - 1));
 
 // ============================================================
 // スライダ
@@ -496,6 +498,8 @@ function ensureAudio(){
   fx.dL = ctx.createDelay(2.5); fx.dR = ctx.createDelay(2.5);
   const lpL = ctx.createBiquadFilter(), lpR = ctx.createBiquadFilter();
   lpL.frequency.value = lpR.frequency.value = 4500;
+  // 既定 Q (1dB) の山とフィードバック最大 0.92 でループ利得が 1 を超えるので山を消す
+  lpL.Q.value = lpR.Q.value = -6;
   fx.fbL = gainNode(0); fx.fbR = gainNode(0);
   fx.phOut.connect(fx.dL);
   fx.phOut.connect(gainNode(.7)).connect(fx.dR);
@@ -682,11 +686,14 @@ function noteOn(pad){
       const eg = N(gainNode(exBase));
       const dl = N(ctx.createDelay(1));
       dl.delayTime.value = 1 / f;
-      const lp = N(ctx.createBiquadFilter()); lp.frequency.value = R(L.damp);
+      // lowpass の Q は dB 指定で、既定 1dB だと山が 1 を超えループが発散する。
+      // 山を消した上で、ループ内に tanh を置いて振幅の上限を保証する
+      const lp = N(ctx.createBiquadFilter()); lp.frequency.value = R(L.damp); lp.Q.value = -6;
+      const sat = N(ctx.createWaveShaper()); sat.curve = SAT_CURVE;
       const fb = N(gainNode(R(L.fb)));
       const lg = N(gainNode(lvl * .5));
       src.connect(eg).connect(dl);
-      dl.connect(lp).connect(fb).connect(dl);
+      dl.connect(lp).connect(sat).connect(fb).connect(dl);
       dl.connect(lg).connect(input);
       if (L.lfo) lfoTo(v, L.lfo, t, [dl.delayTime], 1 / f / 1731);
       const kp = { f, dl, eg, exBase, pluck: R(L.pluck || 0) };
