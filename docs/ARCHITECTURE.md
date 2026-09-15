@@ -82,26 +82,31 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
 | --- | --- |
 | `ptr:<pointerId>` | pointerdown / pointerup / pointercancel / lostpointercapture |
 | `key:<code>` | keydown (repeat 無視) / keyup |
+| `midi:<key>` | MIDI learn で割り当てた note / CC |
 
 `blur` と `visibilitychange(hidden)` で `releaseAll()`。
 
-### MIDI 対応 (未実装)
+### MIDI learn
 
-`window.stair.press / release` がそのまま外部入力の口になる。
+割当表 `midiMap` は `key → target` の1対1。
 
-```js
-const access = await navigator.requestMIDIAccess();
-for (const input of access.inputs.values()) {
-  input.onmidimessage = ({ data: [st, note, vel] }) => {
-    const pad = NOTE_MAP[note]; if (pad == null) return;
-    const src = `midi:${input.id}:${note}`;
-    if ((st & 0xf0) === 0x90 && vel > 0) stair.press(pad, src);
-    else if ((st & 0xf0) === 0x80 || (st & 0xf0) === 0x90) stair.release(pad, src);
-  };
-}
-```
+| | 形式 |
+| --- | --- |
+| key | `note:<ch>:<num>` / `cc:<ch>:<num>` (入力デバイスは区別しない。繋ぎ直しても効く) |
+| target | `pad:<0-15>` / `slider:<input id>` |
 
-AudioContext 生成にはユーザー操作が要るので、MIDI だけで弾き始める場合は最初に一度クリックさせる必要がある。
+- **learn**: `setLearning(true)` で body に `.learning`。パッドの pointerdown と `.ctl` 行の pointerdown が `selectTarget()` になる
+  (スライダの input は `pointer-events:none` にして値を動かさない)。選択中に来た最初の note on / CC で `assign()`。
+  同じ target の旧 key と、同じ key の旧 target は外れる。スライダに note は割り当てない
+- **演奏**: パッドは note on/off、または CC の 64 以上/未満で `press / release(pad, 'midi:<key>')`。
+  スライダは CC 0–127 を min–max に写して `input` イベントを発火し、既存の readout 更新と `applyFx()` に乗せる
+- **保存**: `localStorage['stair-one.midi.v1'] = { map }`。読み込み時に存在しない target は捨てる
+- **Web MIDI 取得**: 初回の learn 押下時。保存済み割当があれば読み込み時にも取る。`statechange` で入力を付け直し、
+  切断時は `midi:` 由来の押下を全部離す (note off が届かないため)
+- **音声の解錠**: MIDI 入力はユーザー操作扱いにならず AudioContext を動かせない。learn 押下とページ上の最初の
+  pointerdown / keydown で `ensureAudio()`。動いていないときに割当済み MIDI が来たら状態表示に `click to enable sound` を出す
+
+テストは `tests/midi.spec.js` が `navigator.requestMIDIAccess` を偽物に差し替え、`window.__midiSend([status, d1, d2])` で入力を注入する。
 
 ## テスト
 
@@ -110,4 +115,5 @@ AudioContext 生成にはユーザー操作が要るので、MIDI だけで弾�
 | project | 内容 |
 | --- | --- |
 | `audio-chromium` | 押下で鳴る / 離すと止まる、16パッド全発音、キーボード、blur、発音ごと・発音中のゆらぎ、最大設定でクリップしない |
+| `midi-chromium` | MIDI learn: モード切替、note / CC の割当と演奏、保存、再割当・解除、非対応ブラウザ |
 | `desktop-chromium` / `mobile-webkit` | 4x4 配置、横スクロールなし、ポインタ押下、マルチタッチ、スライダ表示、狭幅の積み順 |

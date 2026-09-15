@@ -109,6 +109,26 @@
   input[type=range]::-moz-range-thumb{width:.8rem;height:.8rem;border:none;border-radius:50%;background:var(--ink)}
   .hint{font-size:.6rem;letter-spacing:.12em;color:var(--dim);line-height:1.7}
 
+  /* ---- MIDI learn ---- */
+  .midi{margin-left:auto;display:flex;gap:.55rem;align-items:center;align-self:center}
+  .tbtn{
+    border:1px solid var(--line);padding:.42rem .8rem;
+    font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;white-space:nowrap;
+    background:var(--panel);transition:background .18s,border-color .18s,color .18s;
+  }
+  .tbtn:hover{background:var(--panel-hi)}
+  .tbtn[aria-pressed="true"]{background:var(--amber);color:#101A22;border-color:var(--amber)}
+  .tbtn[disabled]{opacity:.35;cursor:not-allowed}
+  #midiStatus.warn{color:var(--amber)}
+  .midi-badge{font-family:var(--data);font-size:.58rem;letter-spacing:0;color:var(--amber);text-transform:none}
+  .pad .midi-badge{position:absolute;left:2.1rem;top:.5rem}
+  .pad[aria-pressed="true"] .midi-badge{color:#101A22}
+  /* learn 中: 割り当てられる要素を破線で示す。スライダはつまみを動かさず行ごと選ぶ */
+  body.learning .pad,body.learning .ctl{outline:1px dashed rgba(216,163,64,.55);outline-offset:2px;cursor:copy}
+  body.learning .ctl input{pointer-events:none}
+  body.learning .learn-sel{outline:2px solid var(--amber);animation:sel .5s steps(2) infinite}
+  @keyframes sel{50%{outline-color:transparent}}
+
   /* 狭幅: パッドを上、スライダを下に積んでページをスクロールさせる */
   @media (max-width:760px){
     main{grid-template-columns:1fr}
@@ -125,6 +145,11 @@
   <a class="home" href="../" aria-label="Home"><svg viewBox="0 0 512 512" aria-hidden="true"><g><path fill-rule="evenodd" d="M48 0H464A48 48 0 0 1 512 48V464A48 48 0 0 1 464 512H48A48 48 0 0 1 0 464V48A48 48 0 0 1 48 0ZM72 34H440A38 38 0 0 1 478 72V440A38 38 0 0 1 440 478H72A38 38 0 0 1 34 440V72A38 38 0 0 1 72 34Z"/><path d="M149 122L241 210L241 270L170 208V381H128V208L59 270V210Z"/><path d="M342 135H385V310L457 247V306L364 394L272 307V247L342 310Z"/></g></svg></a>
   <span class="mark">Stair One</span>
   <span class="sub">16 noise pads <span class="ver">v0.1</span></span>
+  <div class="midi">
+    <span class="sub" id="midiStatus" role="status"></span>
+    <button class="tbtn" id="midiClear" hidden>clear all</button>
+    <button class="tbtn" id="midiLearn" aria-pressed="false">MIDI learn</button>
+  </div>
 </header>
 <main>
   <section class="pads">
@@ -855,10 +880,11 @@ function tick(){
 
 // ============================================================
 // 入力層
-//   押下元 (pointer / key / 将来の MIDI) ごとに保持し、どれか1つでも押されていれば鳴らす。
-//   MIDI 対応時は noteon → stair.press(pad, 'midi:<ch>:<note>')、noteoff → stair.release(...) で繋ぐ
+//   押下元 (ptr:<id> / key:<code> / midi:<key>) ごとに保持し、どれか1つでも押されていれば鳴らす。
 // ============================================================
 const holds = Array.from({ length: 16 }, () => new Set());
+// MIDI learn の状態。learning 中はパッド / スライダを押すと割当先の選択になる
+let learning = false, selected = null;
 const padEls = [];
 
 function press(pad, src){
@@ -891,11 +917,12 @@ PATCHES.forEach((p, i) => {
   b.dataset.pad = i;
   b.setAttribute('aria-pressed', 'false');
   b.setAttribute('aria-label', p.name);
-  b.innerHTML = `<span class="no">${String(i + 1).padStart(2, '0')}</span><span class="key">${KEY_LABEL[i]}</span><span class="nm"></span>`;
+  b.innerHTML = `<span class="no">${String(i + 1).padStart(2, '0')}</span><span class="key">${KEY_LABEL[i]}</span><span class="midi-badge"></span><span class="nm"></span>`;
   b.querySelector('.nm').textContent = p.name;
   const src = e => 'ptr:' + e.pointerId;
   b.addEventListener('pointerdown', e => {
     e.preventDefault();
+    if (learning) { selectTarget('pad:' + i); return; }
     try { b.setPointerCapture(e.pointerId); } catch (err) {}
     press(i, src(e));
   });
@@ -906,6 +933,12 @@ PATCHES.forEach((p, i) => {
 });
 
 window.addEventListener('keydown', e => {
+  // learn 中は演奏せず、Esc で抜ける / Delete で選択中の割当を外す
+  if (learning) {
+    if (e.code === 'Escape') { e.preventDefault(); setLearning(false); }
+    else if ((e.code === 'Delete' || e.code === 'Backspace') && selected) { e.preventDefault(); unassign(selected); }
+    return;
+  }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const i = KEYS.indexOf(e.code);
   if (i < 0) return;
@@ -920,9 +953,170 @@ window.addEventListener('keyup', e => {
 window.addEventListener('blur', releaseAll);
 document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
 
-// 外部入力 (将来の MIDI) とテストから使う口
+// ============================================================
+// MIDI learn
+//   key: note:<ch>:<num> / cc:<ch>:<num> (入力デバイスは区別しない)
+//   target: pad:<0-15> / slider:<input id>。1 target に 1 key、1 key に 1 target
+// ============================================================
+const MIDI_STORE = 'stair-one.midi.v1';
+const midiLearnBtn = $('midiLearn'), midiClearBtn = $('midiClear'), midiStatus = $('midiStatus');
+let midiAccess = null, midiRequest = null;
+
+function targetEl(target){
+  const [kind, id] = target.split(':');
+  if (kind === 'pad') return padEls[+id] || null;
+  const input = kind === 'slider' ? $(id) : null;
+  return input ? input.closest('.ctl') : null;
+}
+function loadMidiMap(){
+  try {
+    const o = JSON.parse(localStorage.getItem(MIDI_STORE) || '{}');
+    const map = {};
+    for (const [k, t] of Object.entries((o && o.map) || {})) if (typeof t === 'string' && targetEl(t)) map[k] = t;
+    return map;
+  } catch (e) { return {}; }
+}
+function saveMidiMap(){
+  try { localStorage.setItem(MIDI_STORE, JSON.stringify({ map: midiMap })); } catch (e) {}
+}
+const keyLabel = key => {
+  const [type, ch, num] = key.split(':');
+  return (type === 'note' ? 'N' : 'CC') + num + (ch !== '1' ? ` ch${ch}` : '');
+};
+
+// スライダ行にもバッジを置き、learn 中は行ごと選べるようにする
+for (const input of document.querySelectorAll('.controls input[type=range]')) {
+  const ctl = input.closest('.ctl'), row = ctl.querySelector('.row');
+  const badge = document.createElement('span');
+  badge.className = 'midi-badge';
+  row.insertBefore(badge, row.querySelector('output'));
+  ctl.addEventListener('pointerdown', e => {
+    if (!learning) return;
+    e.preventDefault();
+    selectTarget('slider:' + input.id);
+  });
+}
+
+let midiMap = loadMidiMap();
+
+function renderBadges(){
+  document.querySelectorAll('.midi-badge').forEach(b => { b.textContent = ''; });
+  for (const [key, target] of Object.entries(midiMap)) {
+    const badge = targetEl(target)?.querySelector('.midi-badge');
+    if (badge) badge.textContent = keyLabel(key);
+  }
+}
+function assign(key, target){
+  for (const [k, t] of Object.entries(midiMap)) if (t === target) delete midiMap[k];
+  midiMap[key] = target;
+  saveMidiMap(); renderBadges();
+}
+function unassign(target){
+  for (const [k, t] of Object.entries(midiMap)) if (t === target) delete midiMap[k];
+  saveMidiMap(); renderBadges();
+}
+function selectTarget(target){
+  if (selected) targetEl(selected)?.classList.remove('learn-sel');
+  selected = target;
+  if (target) targetEl(target)?.classList.add('learn-sel');
+}
+function setLearning(on){
+  learning = on;
+  document.body.classList.toggle('learning', on);
+  midiLearnBtn.setAttribute('aria-pressed', String(on));
+  midiClearBtn.hidden = !on;
+  if (on) releaseAll(); else selectTarget(null);
+}
+function setStatus(text, warn = false){
+  midiStatus.textContent = text;
+  midiStatus.classList.toggle('warn', warn);
+}
+
+function attachInputs(){
+  let n = 0;
+  for (const input of midiAccess.inputs.values()) {
+    if (input.state === 'disconnected') continue;
+    input.onmidimessage = onMidi;   // 代入でポートが開く
+    n++;
+  }
+  setStatus(n ? `MIDI ${n} in` : 'no MIDI input');
+}
+function requestMidi(){
+  if (midiRequest || !navigator.requestMIDIAccess) return;
+  midiRequest = navigator.requestMIDIAccess().then(access => {
+    midiAccess = access;
+    access.onstatechange = e => {
+      attachInputs();
+      // 抜かれたデバイスの note off は届かないので、MIDI 由来の押下を全部離す
+      if (e.port && e.port.type === 'input' && e.port.state === 'disconnected') {
+        holds.forEach((h, pad) => { for (const s of [...h]) if (s.startsWith('midi:')) release(pad, s); });
+      }
+    };
+    attachInputs();
+  }).catch(() => { midiRequest = null; setStatus('MIDI denied', true); });
+}
+
+function onMidi(e){
+  const [st, d1, d2 = 0] = e.data;
+  const type = st & 0xf0, ch = (st & 0x0f) + 1;
+  let key, on, value;
+  if (type === 0x90 || type === 0x80) { key = `note:${ch}:${d1}`; on = type === 0x90 && d2 > 0; }
+  else if (type === 0xb0) { key = `cc:${ch}:${d1}`; value = d2; on = d2 >= 64; }
+  else return;
+
+  if (learning) {
+    if (!selected) return;
+    const isCC = type === 0xb0;
+    if (!isCC && !on) return;                              // note off では割り当てない
+    if (selected.startsWith('slider:') && !isCC) return;  // スライダは CC のみ
+    assign(key, selected);
+    selectTarget(null);
+    return;
+  }
+
+  const target = midiMap[key];
+  if (!target) return;
+  // MIDI 入力はユーザー操作扱いにならず、音声を解錠できない
+  if (!ctx || ctx.state !== 'running') setStatus('click to enable sound', true);
+  else if (midiStatus.classList.contains('warn')) attachInputs();
+
+  const [kind, id] = target.split(':');
+  if (kind === 'pad') {
+    if (on) press(+id, 'midi:' + key); else release(+id, 'midi:' + key);
+  } else if (value !== undefined) {
+    const input = $(id);
+    const min = +input.min, max = +input.max;
+    input.value = String(Math.round(min + (max - min) * value / 127));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+if (navigator.requestMIDIAccess) {
+  midiLearnBtn.addEventListener('click', () => {
+    ensureAudio();   // ボタン押下はユーザー操作なので、ここで音声も解錠しておく
+    requestMidi();
+    setLearning(!learning);
+  });
+  midiClearBtn.addEventListener('click', () => {
+    midiMap = {};
+    saveMidiMap(); renderBadges(); selectTarget(null);
+  });
+  // 保存済みの割当があれば、learn を押さなくても MIDI で弾けるようにする
+  if (Object.keys(midiMap).length) requestMidi();
+} else {
+  midiLearnBtn.disabled = true;
+  midiLearnBtn.title = 'このブラウザは Web MIDI 非対応 / Web MIDI is not supported';
+}
+renderBadges();
+
+// MIDI だけで弾き始めると音が出ないので、ページ上の最初の操作で音声を解錠する
+document.addEventListener('pointerdown', () => ensureAudio(), true);
+document.addEventListener('keydown', () => ensureAudio(), true);
+
+// 外部入力とテストから使う口
 window.stair = {
   press, release, releaseAll,
+  midiMap: () => ({ ...midiMap }),
   voiceCount: () => voices.length,
   debug: () => voices.map(v => ({ pad: v.pad, root: v.root, cut: v.cut, pitch: v.pitch, driftDir: v.driftDir, released: v.released })),
 };

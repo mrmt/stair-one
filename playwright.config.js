@@ -35,6 +35,15 @@ export default defineConfig({
         launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
       },
     },
+    // MIDI learn。Web MIDI は偽物に差し替える。MIDI 経由の発音も見るので再生を許可する
+    {
+      name: 'midi-chromium',
+      testMatch: /midi\.spec\.js/,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--autoplay-policy=no-user-gesture-required'] },
+      },
+    },
     // macOS相当
     {
       name: 'desktop-chromium',

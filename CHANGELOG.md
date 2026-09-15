@@ -2,6 +2,9 @@
 
 ## 未リリース
 
+- **MIDI learn を追加した** — ヘッダーの `MIDI learn` で learn モードに入り、パッド / スライダを選んでコントローラを動かすと割り当てる。
+  パッドは note / CC (ボタン型)、スライダは CC。割当は `localStorage` (`stair-one.midi.v1`) に保存し、次回も有効。
+  learn 中は `Delete` で解除、`clear all` で全解除、`Esc` で抜ける。Web MIDI 非対応ブラウザではボタンを無効にする
 - **タイトルの左にアイコンを置き、親ディレクトリ (`../`) へのリンクにした** — elevator-one / elevator-two と同じ SVG を `index.html` に直書き (`header a.home`)
 
 ## v0.1
