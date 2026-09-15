@@ -41,9 +41,11 @@ export default defineConfig({
       testMatch: /interaction\.spec\.js/,
       use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } },
     },
-    // iOS相当。WebKit + タッチ
+    // iOS相当。WebKit + タッチ。
+    // CI (ubuntu) の WebKit はプロセス内で最初の AudioContext 生成に30秒以上かかることがあるので延ばす
     {
       name: 'mobile-webkit',
+      timeout: 90000,
       testMatch: /interaction\.spec\.js/,
       use: { ...devices['iPhone 14'] },
     },
