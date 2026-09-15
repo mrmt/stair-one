@@ -7,7 +7,7 @@
 ```
 Voice × n ─→ voiceBus
   → Distortion (WaveShaper, dry/wet)
-  → BitCrusher (AudioWorklet を Blob URL で読み込み, dry/wet)
+  → BitCrusher (AudioWorklet を Blob URL で読み込み, dry/wet。つまみは無く固定量 CRUSH = 0.2)
   → Phaser (allpass 6段, LFO→detune, DelayNode 経由のフィードバック)
   ├→ sum (dry)
   └→ StereoDelay (L/R 別時間, 交差フィードバック, LPF) → sum
@@ -54,6 +54,9 @@ karplus は AudioParam に cent を足せないので、`tick()` で遅延時間
 
 ドリフトは発音ごとに上昇 / 下降 / なしを確率で選び、`drift.max` cent で折り返す。
 
+pitch つまみ (±12 半音) は `tick()` で全ボイスの `cents` に足すので、発音中の音にも 30ms 以内に掛かる
+(osc / grain は `pitchCV`、karplus は遅延時間の計算に入る)。
+
 ### LFO
 
 `makeLFO()`: sine / square / sawtooth は OscillatorNode。sample & hold は 1秒 64段のランダム階段バッファを
@@ -72,6 +75,16 @@ karplus のフィードバック、粒の密度、アルペジオ速度を少し
 attack / decay / release は全パッド共通スライダの値 × 発音ごとの 0.75〜1.3 倍。sustain はパッチ側。
 離すと `cancelAndHoldAtTime` から `setTargetAtTime(0, rel/6)` で落とし、`rel` 秒後に `dispose()` で全ノードを切り離す。
 Voice が 40 を超えたらリリース中の古いものから捨てる。
+
+## つまみ
+
+`.knob` の中に SVG (弧・本体・指示線) と、実体の `<input type="range" id="s_*">` を透明で重ねている。
+値は常に input が持ち、描画 (`drawKnob()`)・表示 (`updateReadouts()`)・音 (`applyFx()`) は input の `input` イベントで更新する。
+こうしておくと、キーボード操作と読み上げ、MIDI の `slider:<id>` 割当、Playwright の `fill` がそのまま使える。
+
+- 縦ドラッグ: pointer capture で 150px = 全域 (Shift で 600px)。ホイール: 1/100 (Shift で 1/400)。ダブルクリック: HTML の初期値に戻す
+- 弧は -135°〜+135°、`pathLength="100"` の path に `stroke-dasharray` で値の区間だけ描く。min が負の input (pitch) は中央から伸ばす
+- learn 中はつまみのドラッグとホイールを止め、`.ctl` の pointerdown が割当先の選択になる
 
 ## 入力層
 
@@ -96,7 +109,7 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
 | target | `pad:<0-15>` / `slider:<input id>` |
 
 - **learn**: `setLearning(true)` で body に `.learning`。パッドの pointerdown と `.ctl` 行の pointerdown が `selectTarget()` になる
-  (スライダの input は `pointer-events:none` にして値を動かさない)。選択中に来た最初の note on / CC で `assign()`。
+  (つまみはドラッグを止めて値を動かさない)。選択中に来た最初の note on / CC で `assign()`。
   同じ target の旧 key と、同じ key の旧 target は外れる。スライダに note は割り当てない
 - **演奏**: パッドは note on/off、または CC の 64 以上/未満で `press / release(pad, 'midi:<key>')`。
   スライダは CC 0–127 を min–max に写して `input` イベントを発火し、既存の readout 更新と `applyFx()` に乗せる

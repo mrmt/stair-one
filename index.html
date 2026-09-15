@@ -52,7 +52,7 @@
 
   main{
     flex:1;min-height:0;display:grid;
-    grid-template-columns:minmax(0,1fr) minmax(220px,280px);
+    grid-template-columns:minmax(250px,300px) minmax(0,1fr);
     gap:1px;background:var(--line);
   }
   section{background:rgba(0,0,0,.21);padding:1rem;min-width:0}
@@ -90,24 +90,28 @@
   .pad[aria-pressed="true"] .no,.pad[aria-pressed="true"] .key{color:#101A22}
   @keyframes flicker{50%{background:#E3B55A}}
 
-  /* ---- スライダ ---- */
+  /* ---- つまみ ---- */
   .controls{overflow-y:auto}
-  fieldset{border:none;margin-bottom:1.3rem}
-  .ctl{display:block;margin-bottom:.8rem}
-  .ctl .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:.3rem}
-  .ctl .lb{font-size:.72rem;letter-spacing:.18em;text-transform:uppercase}
-  .ctl output{font-family:var(--data);font-size:.66rem;color:var(--amber)}
-  input[type=range]{
-    -webkit-appearance:none;appearance:none;width:100%;height:1.2rem;background:transparent;
-  }
-  input[type=range]::-webkit-slider-runnable-track{height:2px;background:var(--line)}
-  input[type=range]::-moz-range-track{height:2px;background:var(--line)}
-  input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none;width:.8rem;height:.8rem;margin-top:calc(-.4rem + 1px);
-    border-radius:50%;background:var(--ink);
-  }
-  input[type=range]::-moz-range-thumb{width:.8rem;height:.8rem;border:none;border-radius:50%;background:var(--ink)}
-  .hint{font-size:.6rem;letter-spacing:.12em;color:var(--dim);line-height:1.7}
+  /* 大8個は2列×4行。列優先で流し、左列 attack〜pitch、右列 delay〜phaser にする */
+  .knobs{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(4,auto);grid-auto-flow:column;gap:.9rem .6rem}
+  .knobs.small{grid-template-rows:none;grid-auto-flow:row;margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--line)}
+  .ctl{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.25rem 0;text-align:center}
+  .knob{position:relative;display:block;width:4.2rem;height:4.2rem;cursor:ns-resize;touch-action:none;user-select:none;-webkit-user-select:none}
+  .small .knob{width:2.9rem;height:2.9rem}
+  .knob svg{display:block;width:100%;height:100%;overflow:visible}
+  .knob .track,.knob .val{fill:none;stroke-width:5}
+  .knob .track{stroke:var(--line);stroke-linecap:round}
+  .knob .val{stroke:var(--amber)}
+  .knob .body{fill:var(--panel-hi);stroke:var(--line);stroke-width:1.5}
+  .knob .ptr{stroke:var(--ink);stroke-width:4;stroke-linecap:round}
+  /* 実体の range input はつまみに透明で重ねる。キーボード操作・読み上げ・MIDI 割当・テストの fill を担う */
+  .knob input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+  .knob:has(input:focus-visible) svg{outline:2px solid var(--amber);outline-offset:3px;border-radius:50%}
+  .ctl .lb{font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+  .small .ctl .lb{font-size:.55rem}
+  .ctl output{font-family:var(--data);font-size:.6rem;color:var(--amber)}
+  .ctl .midi-badge{position:absolute;top:0;right:.1rem}
+  .hint{font-size:.6rem;letter-spacing:.12em;color:var(--dim);line-height:1.7;margin-top:1.1rem}
 
   /* ---- MIDI learn ---- */
   .midi{margin-left:auto;display:flex;gap:.55rem;align-items:center;align-self:center}
@@ -123,15 +127,16 @@
   .midi-badge{font-family:var(--data);font-size:.58rem;letter-spacing:0;color:var(--amber);text-transform:none}
   .pad .midi-badge{position:absolute;left:2.1rem;top:.5rem}
   .pad[aria-pressed="true"] .midi-badge{color:#101A22}
-  /* learn 中: 割り当てられる要素を破線で示す。スライダはつまみを動かさず行ごと選ぶ */
+  /* learn 中: 割り当てられる要素を破線で示す。つまみは値を動かさず、ラベルごと選ぶ */
   body.learning .pad,body.learning .ctl{outline:1px dashed rgba(216,163,64,.55);outline-offset:2px;cursor:copy}
   body.learning .ctl input{pointer-events:none}
   body.learning .learn-sel{outline:2px solid var(--amber);animation:sel .5s steps(2) infinite}
   @keyframes sel{50%{outline-color:transparent}}
 
-  /* 狭幅: パッドを上、スライダを下に積んでページをスクロールさせる */
+  /* 狭幅: パッドを上、つまみを下に積んでページをスクロールさせる (DOM はつまみが先なので order で入れ替える) */
   @media (max-width:760px){
     main{grid-template-columns:1fr}
+    .pads{order:-1}
     .grid{width:100%;gap:.4rem}
     .pad{padding:.4rem}
     .pad .nm{font-size:.52rem;letter-spacing:.08em}
@@ -152,30 +157,26 @@
   </div>
 </header>
 <main>
+  <section class="controls">
+    <!-- 列優先: 左列 attack / decay / release / pitch、右列 delay time / delay feedback / delay mix / phaser -->
+    <div class="knobs">
+      <label class="ctl"><span class="knob"><input type="range" id="s_attack" min="0" max="100" value="21"></span><span class="lb">attack</span><output for="s_attack"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_decay" min="0" max="100" value="60"></span><span class="lb">decay</span><output for="s_decay"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_release" min="0" max="100" value="53"></span><span class="lb">release</span><output for="s_release"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_pitch" min="-12" max="12" step="0.1" value="0"></span><span class="lb">pitch</span><output for="s_pitch"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dtime" min="0" max="100" value="70"></span><span class="lb">delay time</span><output for="s_dtime"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dfb" min="0" max="92" value="40"></span><span class="lb">delay feedback</span><output for="s_dfb"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dmix" min="0" max="100" value="25"></span><span class="lb">delay mix</span><output for="s_dmix"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_phaser" min="0" max="100" value="20"></span><span class="lb">phaser</span><output for="s_phaser"></output></label>
+    </div>
+    <div class="knobs small">
+      <label class="ctl"><span class="knob"><input type="range" id="s_drive" min="0" max="100" value="15"></span><span class="lb">distortion</span><output for="s_drive"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_volume" min="0" max="100" value="80"></span><span class="lb">volume</span><output for="s_volume"></output></label>
+    </div>
+    <p class="hint">押している間だけ鳴る / hold to sound<br>keys: 1234 QWER ASDF ZXCV<br>knob: drag ↕ / shift で微調整 / double-click で既定値</p>
+  </section>
   <section class="pads">
     <div class="grid" id="grid" role="group" aria-label="pads"></div>
-  </section>
-  <section class="controls">
-    <fieldset>
-      <div class="eyebrow">VCA</div>
-      <label class="ctl"><div class="row"><span class="lb">attack</span><output for="s_attack"></output></div><input type="range" id="s_attack" min="0" max="100" value="21"></label>
-      <label class="ctl"><div class="row"><span class="lb">decay</span><output for="s_decay"></output></div><input type="range" id="s_decay" min="0" max="100" value="60"></label>
-      <label class="ctl"><div class="row"><span class="lb">release</span><output for="s_release"></output></div><input type="range" id="s_release" min="0" max="100" value="53"></label>
-    </fieldset>
-    <fieldset>
-      <div class="eyebrow">Effects</div>
-      <label class="ctl"><div class="row"><span class="lb">distortion</span><output for="s_drive"></output></div><input type="range" id="s_drive" min="0" max="100" value="15"></label>
-      <label class="ctl"><div class="row"><span class="lb">bitcrush</span><output for="s_crush"></output></div><input type="range" id="s_crush" min="0" max="100" value="0"></label>
-      <label class="ctl"><div class="row"><span class="lb">phaser</span><output for="s_phaser"></output></div><input type="range" id="s_phaser" min="0" max="100" value="20"></label>
-      <label class="ctl"><div class="row"><span class="lb">delay time</span><output for="s_dtime"></output></div><input type="range" id="s_dtime" min="0" max="100" value="70"></label>
-      <label class="ctl"><div class="row"><span class="lb">delay feedback</span><output for="s_dfb"></output></div><input type="range" id="s_dfb" min="0" max="92" value="40"></label>
-      <label class="ctl"><div class="row"><span class="lb">delay mix</span><output for="s_dmix"></output></div><input type="range" id="s_dmix" min="0" max="100" value="25"></label>
-    </fieldset>
-    <fieldset>
-      <div class="eyebrow">Output</div>
-      <label class="ctl"><div class="row"><span class="lb">volume</span><output for="s_volume"></output></div><input type="range" id="s_volume" min="0" max="100" value="80"></label>
-    </fieldset>
-    <p class="hint">押している間だけ鳴る / hold to sound<br>keys: 1234 QWER ASDF ZXCV</p>
   </section>
 </main>
 <script>
@@ -316,7 +317,8 @@ const PATCHES = [
     filter: { type: 'bandpass', cut: [500, 2000], q: [2, 6], sweep: [.05, .3], lfo: { shape: 'sh', rate: [2, 8], depth: [300, 1200] } },
     sus: [.8, 1] },
 
-  { name: 'S&H Filter Noise', gain: 1.1,
+  // 出力段のコンプで潰れるため、ゲインの比では音量が下がらない。出力 RMS の実測で旧 1.1 の約70%になる値
+  { name: 'S&H Filter Noise', gain: .47,
     layers: [
       { kind: 'noise', level: 1 },
     ],
@@ -375,8 +377,8 @@ const P = {
   attack:  () => logMap(+$('s_attack').value, .002, 4),
   decay:   () => logMap(+$('s_decay').value, .02, 6),
   release: () => logMap(+$('s_release').value, .01, 8),
+  pitch:   () => +$('s_pitch').value,   // 半音
   drive:   () => +$('s_drive').value / 100,
-  crush:   () => +$('s_crush').value / 100,
   phaser:  () => +$('s_phaser').value / 100,
   dtime:   () => logMap(+$('s_dtime').value, .02, 1.2),
   dfb:     () => +$('s_dfb').value / 100,
@@ -385,13 +387,66 @@ const P = {
 };
 const fmtSec = s => s < 1 ? `${Math.round(s * 1000)}ms` : `${s.toFixed(2)}s`;
 const fmtPct = x => `${Math.round(x * 100)}`;
-const FMT = { attack: fmtSec, decay: fmtSec, release: fmtSec, dtime: fmtSec,
-  drive: fmtPct, crush: fmtPct, phaser: fmtPct, dfb: fmtPct, dmix: fmtPct, volume: fmtPct };
+const fmtSt = st => `${st >= 0 ? '+' : ''}${st.toFixed(1)} st`;
+const FMT = { attack: fmtSec, decay: fmtSec, release: fmtSec, dtime: fmtSec, pitch: fmtSt,
+  drive: fmtPct, phaser: fmtPct, dfb: fmtPct, dmix: fmtPct, volume: fmtPct };
+// bitcrush はつまみを持たず、軽くかけたままにする
+const CRUSH = .2;
 
 function updateReadouts(){
-  for (const k of Object.keys(P)) $('s_' + k).previousElementSibling.querySelector('output').textContent = FMT[k](P[k]());
+  for (const k of Object.keys(P)) document.querySelector(`output[for="s_${k}"]`).textContent = FMT[k](P[k]());
 }
-for (const k of Object.keys(P)) $('s_' + k).addEventListener('input', () => { updateReadouts(); applyFx(); });
+
+// ---- つまみ ----
+// 弧は -135°〜+135°。pathLength=100 にして stroke-dasharray で値の範囲だけ描く
+const KNOB_ARC = 'M18.89 81.11 A44 44 0 1 1 81.11 81.11';
+const KNOB_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><path class="track" d="${KNOB_ARC}" pathLength="100"/><path class="val" d="${KNOB_ARC}" pathLength="100"/><circle class="body" cx="50" cy="50" r="32"/><line class="ptr" x1="50" y1="50" x2="50" y2="25"/></svg>`;
+
+function drawKnob(input){
+  const min = +input.min, max = +input.max;
+  const f = (+input.value - min) / (max - min);
+  const zero = min < 0 ? -min / (max - min) : 0;   // 両極 (pitch) は中央から弧を伸ばす
+  const a = Math.min(f, zero), b = Math.max(f, zero);
+  const knob = input.parentElement;
+  knob.querySelector('.val').style.strokeDasharray = `0 ${a * 100} ${(b - a) * 100} 100`;
+  knob.querySelector('.ptr').setAttribute('transform', `rotate(${-135 + 270 * f} 50 50)`);
+}
+
+for (const input of document.querySelectorAll('.knob input')) {
+  const knob = input.parentElement;
+  knob.insertAdjacentHTML('afterbegin', KNOB_SVG);
+  const def = input.value;
+  const range = () => +input.max - +input.min;
+  const setValue = x => {
+    const prev = input.value;
+    input.value = String(x);   // min / max / step への丸めは input が行う
+    if (input.value !== prev) input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  input.addEventListener('input', () => { drawKnob(input); updateReadouts(); applyFx(); });
+
+  // 縦ドラッグ: 150px で全域、Shift で 4 倍細かく
+  let drag = null;
+  knob.addEventListener('pointerdown', e => {
+    if (learning) return;   // learn 中は .ctl 側で割当先の選択になる
+    e.preventDefault();
+    try { knob.setPointerCapture(e.pointerId); } catch (err) {}
+    input.focus({ preventScroll: true });
+    drag = { id: e.pointerId, y: e.clientY, v: +input.value };
+  });
+  knob.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const px = e.shiftKey ? 600 : 150;
+    setValue(drag.v + (drag.y - e.clientY) / px * range());
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) knob.addEventListener(type, () => { drag = null; });
+  knob.addEventListener('wheel', e => {
+    if (learning) return;
+    e.preventDefault();
+    setValue(+input.value - Math.sign(e.deltaY) * range() / (e.shiftKey ? 400 : 100));
+  }, { passive: false });
+  knob.addEventListener('dblclick', e => { e.preventDefault(); setValue(def); });
+  drawKnob(input);
+}
 updateReadouts();
 
 // ============================================================
@@ -575,7 +630,7 @@ function applyFx(){
   fx.distDry.gain.setTargetAtTime(1 - dm, t, k);
   fx.distWet.gain.setTargetAtTime(dm * .5, t, k);
 
-  const c = P.crush();
+  const c = CRUSH;
   if (fx.crusher) {
     fx.crusher.parameters.get('bits').setTargetAtTime(16 - c * 14, t, k);
     fx.crusher.parameters.get('down').setTargetAtTime(1 + c * c * 40, t, k);
@@ -828,6 +883,7 @@ function tick(){
   const dt = clamp(now - lastTick, .001, .1);
   lastTick = now;
   const ahead = now + .1;
+  const transpose = P.pitch() * 100;   // pitch つまみ。発音中の全ボイスに足す (cent)
 
   for (const v of voices.slice()) {
     if (v.released && now >= v.endAt) { dispose(v); continue; }
@@ -835,7 +891,8 @@ function tick(){
     // 緩やかな上昇 / 下降。上限で折り返す
     v.pitch += v.driftDir * v.driftRate * dt;
     if (Math.abs(v.pitch) > v.driftMax) { v.pitch = clamp(v.pitch, -v.driftMax, v.driftMax); v.driftDir *= -1; }
-    const cents = v.pitch + v.pitchWalk.step(dt);
+    const cents = v.pitch + v.pitchWalk.step(dt) + transpose;
+    v.cents = cents;
     v.pitchCV.offset.setTargetAtTime(cents, now, .05);
 
     // フィルタが開く / 閉じる。端で折り返す
@@ -990,12 +1047,12 @@ const keyLabel = key => {
   return (type === 'note' ? 'N' : 'CC') + num + (ch !== '1' ? ` ch${ch}` : '');
 };
 
-// スライダ行にもバッジを置き、learn 中は行ごと選べるようにする
+// つまみにもバッジを置き、learn 中はラベルごと選べるようにする
 for (const input of document.querySelectorAll('.controls input[type=range]')) {
-  const ctl = input.closest('.ctl'), row = ctl.querySelector('.row');
+  const ctl = input.closest('.ctl');
   const badge = document.createElement('span');
   badge.className = 'midi-badge';
-  row.insertBefore(badge, row.querySelector('output'));
+  ctl.appendChild(badge);
   ctl.addEventListener('pointerdown', e => {
     if (!learning) return;
     e.preventDefault();
@@ -1130,7 +1187,7 @@ window.stair = {
   press, release, releaseAll,
   midiMap: () => ({ ...midiMap }),
   voiceCount: () => voices.length,
-  debug: () => voices.map(v => ({ pad: v.pad, root: v.root, cut: v.cut, pitch: v.pitch, driftDir: v.driftDir, released: v.released })),
+  debug: () => voices.map(v => ({ pad: v.pad, root: v.root, cut: v.cut, pitch: v.pitch, cents: v.cents ?? 0, cv: v.pitchCV.offset.value, delay: v.karplus[0]?.dl.delayTime.value, driftDir: v.driftDir, released: v.released })),
 };
 })();
 </script>

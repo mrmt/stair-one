@@ -54,15 +54,68 @@ test('複数ポインタの同時押しは片方を離しても他方が鳴り�
   await expect(b).toHaveAttribute('aria-pressed', 'false');
 });
 
-test('スライダの値が表示に反映される', async ({ page }) => {
+test('つまみの値が表示に反映される', async ({ page }) => {
   const out = page.locator('output[for="s_attack"]');
   await page.locator('#s_attack').fill('100');
   await expect(out).toHaveText('4.00s');
   await page.locator('#s_volume').fill('50');
   await expect(page.locator('output[for="s_volume"]')).toHaveText('50');
+  await page.locator('#s_pitch').fill('-3.5');
+  await expect(page.locator('output[for="s_pitch"]')).toHaveText('-3.5 st');
 });
 
-test('狭幅ではパッドの下にスライダが来る', async ({ page, viewport }) => {
+test('つまみ8個が2列4行で指定の順に並び、distortion と volume は別に置かれる', async ({ page }) => {
+  const main = page.locator('.knobs:not(.small) .ctl');
+  await expect(main).toHaveCount(8);
+  const items = await main.evaluateAll(els => els.map(e => {
+    const r = e.getBoundingClientRect();
+    return { id: e.querySelector('input').id, x: Math.round(r.x), y: Math.round(r.y) };
+  }));
+  const xs = [...new Set(items.map(i => i.x))].sort((a, b) => a - b);
+  expect(xs).toHaveLength(2);
+  expect(new Set(items.map(i => i.y)).size).toBe(4);
+  const column = x => items.filter(i => i.x === x).sort((a, b) => a.y - b.y).map(i => i.id);
+  expect(column(xs[0])).toEqual(['s_attack', 's_decay', 's_release', 's_pitch']);
+  expect(column(xs[1])).toEqual(['s_dtime', 's_dfb', 's_dmix', 's_phaser']);
+
+  const small = await page.locator('.knobs.small .ctl input').evaluateAll(els => els.map(e => e.id));
+  expect(small).toEqual(['s_drive', 's_volume']);
+  await expect(page.locator('#s_crush')).toHaveCount(0);
+});
+
+test('デスクトップではつまみがパッドの左にある', async ({ page, viewport }) => {
+  test.skip(viewport.width <= 760, 'デスクトップ幅のみ');
+  const ctl = await page.locator('.controls').boundingBox();
+  const grid = await page.locator('#grid').boundingBox();
+  expect(ctl.x + ctl.width).toBeLessThanOrEqual(grid.x);
+});
+
+test('つまみを上へドラッグすると値が増え、ダブルクリックで既定値に戻る', async ({ page, hasTouch }) => {
+  test.skip(hasTouch, 'マウスのあるプロファイルのみ');
+  const input = page.locator('#s_dmix');
+  const knob = page.locator('.ctl', { has: input }).locator('.knob');
+  const box = await knob.boundingBox();
+  const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy - 60, { steps: 6 });
+  await page.mouse.up();
+  const v = Number(await input.inputValue());
+  expect(v).toBeGreaterThan(50);
+  await expect(page.locator('output[for="s_dmix"]')).toHaveText(String(v));
+
+  // 下へドラッグすると減る
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx, cy + 30, { steps: 4 });
+  await page.mouse.up();
+  expect(Number(await input.inputValue())).toBeLessThan(v);
+
+  await knob.dblclick();
+  await expect(input).toHaveValue('25');
+});
+
+test('狭幅ではパッドの下につまみが来る', async ({ page, viewport }) => {
   test.skip(viewport.width > 760, '狭幅のみ');
   const grid = await page.locator('#grid').boundingBox();
   const ctl = await page.locator('.controls').boundingBox();

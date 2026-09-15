@@ -89,6 +89,36 @@ test('発音中もパラメータが揺れる', async ({ page }) => {
   expect(a).not.toBe(b);
 });
 
+test('pitch つまみで発音中の全ボイスの音程が上下する', async ({ page }) => {
+  // ドリフトしないパッドで見る。Buzz 80Hz (osc: pitchCV → detune) と Comb Metal (karplus: 遅延時間を JS で計算)
+  await page.evaluate(() => { window.stair.press(4, 'test'); window.stair.press(8, 'test'); });
+  await page.waitForTimeout(400);
+  const snap = () => page.evaluate(() => Object.fromEntries(window.stair.debug().map(v => [v.pad, { d: v.cents - v.pitch, cv: v.cv, delay: v.delay }])));
+
+  const base = await snap();
+  expect(Math.abs(base[4].d)).toBeLessThan(100);
+  expect(Math.abs(base[8].d)).toBeLessThan(100);
+
+  await page.locator('#s_pitch').fill('12');
+  await expect(page.locator('output[for="s_pitch"]')).toHaveText('+12.0 st');
+  await page.waitForTimeout(500);
+  const up = await snap();
+  for (const pad of [4, 8]) {
+    expect(up[pad].d).toBeGreaterThan(1100);
+    expect(up[pad].d).toBeLessThan(1300);
+  }
+  expect(up[4].cv).toBeGreaterThan(1000);                      // オシレータの detune に届いている
+  expect(up[8].delay / base[8].delay).toBeGreaterThan(.4);     // 1オクターブ上 = 遅延時間が約半分
+  expect(up[8].delay / base[8].delay).toBeLessThan(.6);
+
+  await page.locator('#s_pitch').fill('-12');
+  await page.waitForTimeout(500);
+  const down = await snap();
+  for (const pad of [4, 8]) expect(down[pad].d).toBeLessThan(-1100);
+  expect(down[4].cv).toBeLessThan(-1000);
+  expect(down[8].delay / base[8].delay).toBeGreaterThan(1.6);  // 1オクターブ下 = 約2倍
+});
+
 test('フィードバックを最大にしてもループが発散しない', async ({ page }) => {
   test.setTimeout(40000);
   // Chrome は BiquadFilter の状態が非有限になると警告を出す。発散の検出に使う
@@ -105,7 +135,6 @@ test('フィードバックを最大にしてもループが発散しない', as
 test('音量・歪み最大で16パッド同時押しでもクリップしない', async ({ page }) => {
   await page.locator('#s_volume').fill('100');
   await page.locator('#s_drive').fill('100');
-  await page.locator('#s_crush').fill('60');
   await page.locator('#s_dfb').fill('92');
   await page.evaluate(() => { for (let i = 0; i < 16; i++) window.stair.press(i, 'test'); });
   const { peak } = await maxPeakOver(page, 4000, 100);
