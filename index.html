@@ -397,7 +397,7 @@ updateReadouts();
 // ============================================================
 // オーディオグラフ (最初のパッド押下で作る)
 // ============================================================
-let ctx = null, voiceBus, fx = {}, noiseBuf, shBuf, tapeBuf, tapeRevBuf, lastTick = 0;
+let ctx = null, resuming = null, voiceBus, fx = {}, noiseBuf, shBuf, tapeBuf, tapeRevBuf, lastTick = 0;
 const voices = [];
 const SH_STEPS = 64;
 
@@ -476,7 +476,11 @@ function driveCurve(a){
 }
 
 function ensureAudio(){
-  if (ctx) { if (ctx.state !== 'running') ctx.resume(); return; }
+  if (ctx) {
+    // resume は重ねて呼ばない
+    if (ctx.state !== 'running' && !resuming) resuming = ctx.resume().catch(() => {}).finally(() => { resuming = null; });
+    return;
+  }
   ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
   makeBuffers();
 
@@ -1110,8 +1114,14 @@ if (navigator.requestMIDIAccess) {
 renderBadges();
 
 // MIDI だけで弾き始めると音が出ないので、ページ上の最初の操作で音声を解錠する
-document.addEventListener('pointerdown', () => ensureAudio(), true);
-document.addEventListener('keydown', () => ensureAudio(), true);
+// パッド・learn ボタン・演奏キーは自前で解錠するので除外し、1回の操作で初期化を重ねない
+const unlockAudio = e => {
+  if (e.target instanceof Element && e.target.closest('.pad, #midiLearn')) return;
+  if (e.type === 'keydown' && KEYS.includes(e.code)) return;
+  if (!ctx || ctx.state !== 'running') ensureAudio();
+};
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
 
 // 外部入力とテストから使う口
 window.stair = {
