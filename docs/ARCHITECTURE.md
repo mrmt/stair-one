@@ -116,4 +116,4 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
 | --- | --- |
 | `audio-chromium` | 押下で鳴る / 離すと止まる、16パッド全発音、キーボード、blur、発音ごと・発音中のゆらぎ、最大設定でクリップしない |
 | `midi-chromium` | MIDI learn: モード切替、note / CC の割当と演奏、保存、再割当・解除、非対応ブラウザ |
-| `desktop-chromium` / `mobile-webkit` | 4x4 配置、横スクロールなし、ポインタ押下、マルチタッチ、スライダ表示、狭幅の積み順 |
+| `desktop-chromium` / `mobile-webkit` (WebKit は Web Audio を外して実行。CI の WebKit で AudioContext を動かすとページが固まるため) | 4x4 配置、横スクロールなし、ポインタ押下、マルチタッチ、スライダ表示、狭幅の積み順 |

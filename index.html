@@ -479,9 +479,11 @@ function ensureAudio(){
   if (ctx) {
     // resume は重ねて呼ばない
     if (ctx.state !== 'running' && !resuming) resuming = ctx.resume().catch(() => {}).finally(() => { resuming = null; });
-    return;
+    return true;
   }
-  ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return false;   // Web Audio が無い環境では、押下と表示だけが動く
+  ctx = new AC({ latencyHint: 'interactive' });
   makeBuffers();
 
   voiceBus = gainNode(.6);
@@ -560,6 +562,7 @@ function ensureAudio(){
 
   applyFx();
   setInterval(tick, 30);
+  return true;
 }
 
 let lastDrive = -1;
@@ -898,8 +901,7 @@ function press(pad, src){
   if (h.size === 1) {
     // 初回は AudioContext 生成で待たされることがあるので、点灯を先に出す
     padEls[pad].setAttribute('aria-pressed', 'true');
-    ensureAudio();
-    noteOn(pad);
+    if (ensureAudio()) noteOn(pad);
   }
 }
 function release(pad, src){

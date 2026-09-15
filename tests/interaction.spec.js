@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, browserName }) => {
+  // CI (ubuntu) の WebKit は AudioContext を動かすとページごと固まることがある
+  // (debug ブランチで mobile-webkit を16回ずつ回し、発音を伴うテストが数回タイムアウト)。
+  // このファイルは画面と操作だけを見るので WebKit では Web Audio を外す。音は audio-chromium で見る
+  if (browserName === 'webkit') {
+    await page.addInitScript(() => { window.AudioContext = undefined; window.webkitAudioContext = undefined; });
+  }
   await page.goto('/index.html');
 });
 
