@@ -12,6 +12,17 @@ test('パッドが4x4に並ぶ', async ({ page }) => {
   expect(new Set(boxes.map(b => b.y)).size).toBe(4);
 });
 
+test('タイトルの左に親ディレクトリへ戻るアイコンがある', async ({ page }) => {
+  const home = page.locator('header a.home');
+  await expect(home).toBeVisible();
+  await expect(home).toHaveAttribute('href', '../');
+  await expect(home.locator('svg')).toHaveCount(1);
+  const icon = await home.boundingBox();
+  const title = await page.locator('header .mark').boundingBox();
+  expect(icon.width).toBeGreaterThan(8);
+  expect(icon.x + icon.width).toBeLessThanOrEqual(title.x);
+});
+
 test('横スクロールが出ない', async ({ page }) => {
   const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(over).toBeLessThanOrEqual(0);

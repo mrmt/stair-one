@@ -1,5 +1,9 @@
 # Changelog
 
+## 未リリース
+
+- **タイトルの左にアイコンを置き、親ディレクトリ (`../`) へのリンクにした** — elevator-one / elevator-two と同じ SVG を `index.html` に直書き (`header a.home`)
+
 ## v0.1
 
 - 最初の版。4x4 の16パッド、押している間だけ鳴る
