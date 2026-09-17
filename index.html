@@ -112,6 +112,7 @@
   .ctl output{font-family:var(--data);font-size:.6rem;color:var(--amber)}
   .ctl .midi-badge{position:absolute;top:0;right:.1rem}
   .hint{font-size:.6rem;letter-spacing:.12em;color:var(--dim);line-height:1.7;margin-top:1.1rem}
+  .hint a{color:inherit}
 
   /* ---- MIDI learn ---- */
   .midi{margin-left:auto;display:flex;gap:.55rem;align-items:center;align-self:center}
@@ -173,7 +174,7 @@
       <label class="ctl"><span class="knob"><input type="range" id="s_drive" min="0" max="100" value="15"></span><span class="lb">distortion</span><output for="s_drive"></output></label>
       <label class="ctl"><span class="knob"><input type="range" id="s_volume" min="0" max="100" value="80"></span><span class="lb">volume</span><output for="s_volume"></output></label>
     </div>
-    <p class="hint">押している間だけ鳴る / hold to sound<br>keys: 1234 QWER ASDF ZXCV<br>knob: drag ↕ / shift で微調整 / double-click で既定値</p>
+    <p class="hint">押している間だけ鳴る / hold to sound<br>keys: 1234 QWER ASDF ZXCV<br>knob: drag ↕ / shift で微調整 / double-click で既定値<br><a href="../privacy/">privacy</a></p>
   </section>
   <section class="pads">
     <div class="grid" id="grid" role="group" aria-label="pads"></div>

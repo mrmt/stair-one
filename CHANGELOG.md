@@ -1,5 +1,9 @@
 # Changelog
 
+## 未リリース
+
+- **操作説明の下にプライバシーポリシー (`../privacy/`) へのリンクを足した** — elevator-noise.com 全体のポリシーを `/privacy/` に置いたため
+
 ## v0.1
 
 - **スライダを丸いつまみにし、画面の左に置いた** — 2列×4行の8個 (左列 attack / decay / release / pitch、右列 delay time / delay feedback / delay mix / phaser)。
