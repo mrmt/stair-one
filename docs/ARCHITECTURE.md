@@ -35,7 +35,9 @@ JUCE 8 の薄い殻。音は `engine/ffi` を arm64 + x86_64 の staticlib に�
   AudioContext を作らず、MIDI learn・キーボード演奏・ページ移動のリンクを隠す
 - `au/test/render.swift`: インストール済みの AU を AVAudioEngine のオフライン描画で鳴らし、離すと止まるかを見る
 
-つまみの `id` (`params.rs`) は AU のパラメータ ID にもなるので、変更・削除しない (追加のみ)。
+つまみの `id` (`params.rs`) は AU のパラメータ ID にもなり、Logic のプロジェクトやオートメーションはこの id で値を覚えている。
+**id は変更・削除しない (追加のみ)**。表示名 (`label`)・範囲・初期値は変えてよいが、範囲を変えると保存済みの値の意味が変わる。
+プラグインのバージョンは `au-vX.Y.Z` タグから入り (`make au`)、ホストはこの番号で更新を判断する。
 HTML の `<input>` の min / max / step / value は `META.params` と一致している必要がある (`tests/interaction.spec.js` が確認)。
 
 エンジンは移植前の Web Audio グラフを、Chromium の挙動まで含めて再現している (再現した癖は `engine/README.md`)。

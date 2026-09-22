@@ -83,6 +83,18 @@ make au-install      # ビルド → ~/Library/Audio/Plug-Ins/{Components,VST3} 
 - 画面は Web 版と同じ。プラグインの中では MIDI learn とキーボード演奏を出さない (MIDI はホストから来る)
 - 音は Web 版と同じエンジン (`engine/`)。wasm とネイティブは 1 サンプル単位で同じ出力になる
 
+### 指定したバージョンの AU を作る
+
+Web 版の開発はそのまま続け、AU にしたい時点でタグを打つ。
+
+```sh
+git tag au-v0.2.0 && git push origin au-v0.2.0
+```
+
+GitHub Actions (`.github/workflows/au.yml`) が macOS でビルドし、`auval` と試し鳴らしを通してから、
+AU / VST3 / Standalone の zip を Release に添付する (インストール手順は `au/RELEASE_NOTES.md`)。
+手元で作るなら `git checkout au-v0.2.0 && make au-install`。どちらもプラグインのバージョンはタグの番号になる。
+
 ## 開発
 
 ```sh
