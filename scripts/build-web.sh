@@ -10,7 +10,8 @@ if command -v brew >/dev/null 2>&1 && [ -d "$(brew --prefix rustup 2>/dev/null)/
   PATH="$(brew --prefix rustup)/bin:$PATH"
 fi
 
-# 誰がどこでビルドしても同じ wasm になるよう、パスを埋め込まない
+# wasm にビルドした場所のパスを埋め込まない。ホスト (macOS / Linux) が違うとシンボルのハッシュでバイト列は変わるので、
+# --check はバイト列が違っても同じ音を出せば通す (scripts/embed.mjs)
 export CARGO_TARGET_WASM32_UNKNOWN_UNKNOWN_RUSTFLAGS="--remap-path-prefix=$PWD/engine=/engine --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo"
 (cd engine && cargo build -q -p stair-ffi --release --target wasm32-unknown-unknown && cargo build -q -p render --release)
 
