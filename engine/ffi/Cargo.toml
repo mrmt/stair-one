@@ -1,0 +1,11 @@
+[package]
+name = "stair-ffi"
+version.workspace = true
+edition.workspace = true
+
+# C ABI。wasm (Web 版の AudioWorklet) と staticlib (AU) の両方に使う
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+stair-core = { path = "../core" }

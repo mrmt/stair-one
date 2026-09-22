@@ -1,6 +1,47 @@
 # Architecture
 
-`index.html` 1枚に UI・合成・エフェクト・入力をすべて持つ。Web Audio API のみ。
+`index.html` 1枚に UI と入力を持ち、音は Rust のエンジン (`engine/`) を wasm にして埋め込んだものが作る。
+
+```
+index.html (UI, 入力層, MIDI learn)
+  └ AudioWorklet 'stair-engine' (data: URL) ── 埋め込み wasm (engine/ffi) ── engine/core
+       ↑ port: {t:'on'|'off', pad} / {t:'param', i, v} / {t:'debug'}
+       ↓ port: {t:'count', n} (約 50ms ごと) / {t:'debug', voices}
+```
+
+- `engine/core`: DSP 本体。パッチ定義 (`patches.rs`) とつまみ定義 (`params.rs`) の正本
+- `engine/ffi`: C ABI (`stair_new` / `stair_note_on` / `stair_process` ...)。wasm と AU (staticlib) で共通
+- `engine/render`: 試聴・評価用 CLI (`engine/README.md`)
+- `scripts/build-web.sh`: wasm をビルドし、base64 で `index.html` の `const ENGINE_WASM` に、
+  パッド名とつまみ定義を `const META` に書き込む。`--check` は CI 用
+- `tools/legacy-index.html`: 移植前の Web Audio 版 (v0.1)。`tools/capture-legacy.mjs` と `tools/parity.mjs` が比較に使う
+
+## AU 版 (`au/`)
+
+JUCE 8 の薄い殻。音は `engine/ffi` を arm64 + x86_64 の staticlib にして (`make au-ffi`) リンクし、`stair_render` を呼ぶ。
+
+```
+ホスト (Logic) ── MIDI / オートメーション ──→ StairProcessor (au/src/Processor.cpp) ── stair_* ──→ engine/core
+                                                  ↑↓ イベント 'stair' (JUCE native integration)
+                                               StairEditor: WebBrowserComponent に index.html (BinaryData)
+```
+
+- MIDI はサンプル位置で区切って反映。ノート 36–51 → パッド 0–15、All Notes Off で全部離す
+- パッドの押下元はホストの MIDI と画面の2つ。どちらかが押していれば鳴る (`setPad`)
+- つまみは `stair_param_def` から `AudioParameterFloat` を作る (id は `params.rs` の id)。状態は id → 値の XML
+- 画面 → ホスト: `{t:'ready'}` / `{t:'on'|'off', pad}` / `{t:'param', i, v}`。
+  ホスト → 画面 (30Hz): `{t:'param', i, v}` (値が変わったものだけ) / `{t:'held', mask}`
+- `index.html` は `window.__JUCE__` があればプラグインの中とみなす (`HOST`)。
+  AudioContext を作らず、MIDI learn・キーボード演奏・ページ移動のリンクを隠す
+- `au/test/render.swift`: インストール済みの AU を AVAudioEngine のオフライン描画で鳴らし、離すと止まるかを見る
+
+つまみの `id` (`params.rs`) は AU のパラメータ ID にもなり、Logic のプロジェクトやオートメーションはこの id で値を覚えている。
+**id は変更・削除しない (追加のみ)**。表示名 (`label`)・範囲・初期値は変えてよいが、範囲を変えると保存済みの値の意味が変わる。
+プラグインのバージョンは `au-vX.Y.Z` タグから入り (`make au`)、ホストはこの番号で更新を判断する。
+HTML の `<input>` の min / max / step / value は `META.params` と一致している必要がある (`tests/interaction.spec.js` が確認)。
+
+エンジンは移植前の Web Audio グラフを、Chromium の挙動まで含めて再現している (再現した癖は `engine/README.md`)。
+以下の「ノード」は `engine/core` の中の部品 (`dsp/`) を指す。
 
 ## オーディオグラフ
 
@@ -20,14 +61,16 @@ BiquadFilter の lowpass は Q が **dB 指定**で、既定値 1 だとカッ�
 ループ内に既定 Q の LPF を置くと、フィードバック 0.9 前後でもループ利得が 1 を超えて発散し、
 下流の BiquadFilter が `state is bad` 警告を出して壊れる。karplus とステレオディレイの LPF は `Q = -6` で山を消し、
 karplus はさらにループ内に傾き 1 の tanh を置いて振幅の上限を保証している。
-`tests/audio.spec.js` の「フィードバックを最大にしてもループが発散しない」がこの警告を検出する。
+Rust 版もこの対策をそのまま持つ。`engine/core/tests/engine.rs` の「フィードバック最大でもループが発散しない」が確認する。
 
 `AudioContext` は最初のパッド押下 (ユーザー操作) で `ensureAudio()` が作る。演奏開始ボタンはない。
-BitCrusher の Worklet 読み込みは非同期なので、読み込み完了までは dry だけが通る。
+Worklet の読み込みと wasm の組み立ては非同期なので、その間の押下・つまみ操作は溜めておき、できた時点で順に送る。
+乱数の種は起動ごとに `crypto.getRandomValues` で決める。
 
 ## Voice
 
-1回の押下 = 1 Voice。`noteOn(pad)` がパッチ定義 (`PATCHES`) からノードを組む。
+1回の押下 = 1 Voice。`Voice::start` (`engine/core/src/voice.rs`) がパッチ定義 (`PATCHES`) から今回の値を決める。
+メモリはエンジン生成時に 40 ボイス分確保し、発音中は確保しない。
 
 ```
 layers → VCF (Biquad 1段 or 同一設定2段直列) → amp (ゆらぎ) → vca (ADSR) → StereoPanner → voiceBus
@@ -35,7 +78,7 @@ layers → VCF (Biquad 1段 or 同一設定2段直列) → amp (ゆらぎ) → v
 
 ### パッチ定義の値
 
-`R(x)` が発音ごとに値を確定させる。`[数, 数]` は範囲の一様乱数、文字列配列は1つ選択、それ以外は固定値。
+`Num::sample` / `Rng::pick` が発音ごとに値を確定させる。`r(a, b)` は範囲の一様乱数、`f(x)` は固定値、配列は1つ選択。
 つまりパッチは「値」ではなく「値の分布」を持つ。
 
 ### レイヤー種別
@@ -44,13 +87,14 @@ layers → VCF (Biquad 1段 or 同一設定2段直列) → amp (ゆらぎ) → v
 | --- | --- |
 | `osc` | `count` 本の Oscillator を `spread` cent ずつずらす。1本ごとに別設定の LFO が detune にかかる |
 | `noise` | ループするホワイトノイズ。LFO は音量にかかる (チョップ / トレモロ) |
-| `karplus` | ノイズ励起 → DelayNode(1/f) → LPF → tanh → feedback。`pluck` 回/秒で励起を叩く。ループ内の遅延は最低 128 サンプルになるので f は 300Hz で頭打ち |
+| `karplus` | ノイズ励起 → Delay(1/f) → LPF → tanh → feedback。`pluck` 回/秒で励起を叩く。f は 300Hz で頭打ち。Chromium では閉路の1辺が 128 サンプル遅れるので、実際の周期は 1/f + 128 サンプル (これも再現している) |
 | `grain` | 生成済みの汚いテープ素材 (正/逆) から短い断片を窓付きで散布。wow / flutter の LFO を各粒の detune に配る |
 
 ### 音程
 
 全 osc / grain の detune に `pitchCV` (ドリフト + ランダムウォーク) と `arpCV` (アルペジオ) の ConstantSource を足している。
-karplus は AudioParam に cent を足せないので、`tick()` で遅延時間を計算し直す。
+karplus は遅延時間に cent を足せないので、`tick()` で遅延時間を計算し直す。
+`tick()` は 30ms ごと (128 サンプル境界に切り上げ) にエンジンの中で呼ぶ。
 
 ドリフトは発音ごとに上昇 / 下降 / なしを確率で選び、`drift.max` cent で折り返す。
 
@@ -112,7 +156,7 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
   (つまみはドラッグを止めて値を動かさない)。選択中に来た最初の note on / CC で `assign()`。
   同じ target の旧 key と、同じ key の旧 target は外れる。スライダに note は割り当てない
 - **演奏**: パッドは note on/off、または CC の 64 以上/未満で `press / release(pad, 'midi:<key>')`。
-  スライダは CC 0–127 を min–max に写して `input` イベントを発火し、既存の readout 更新と `applyFx()` に乗せる
+  スライダは CC 0–127 を min–max に写して `input` イベントを発火し、既存の readout 更新と worklet への送信に乗せる
 - **保存**: `localStorage['stair-one.midi.v1'] = { map }`。読み込み時に存在しない target は捨てる
 - **Web MIDI 取得**: 初回の learn 押下時。保存済み割当があれば読み込み時にも取る。`statechange` で入力を付け直し、
   切断時は `midi:` 由来の押下を全部離す (note off が届かないため)
@@ -123,10 +167,18 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
 
 ## テスト
 
+| 場所 | 内容 |
+| --- | --- |
+| `engine/core/tests/engine.rs` (`cargo test`) | 全パッド発音、離すと止まる、同シード同出力、フィードバック最大で発散しない、最大設定でクリップしない、40 ボイス上限、サンプルレート違い |
+| `tools/wasm-check.mjs` | wasm とネイティブの出力が 1 サンプル単位で一致する |
+| `tools/parity.mjs` | 部品単位で Chromium (OfflineAudioContext) と一致する |
+| `scripts/build-web.sh --check` | `index.html` の埋め込みが `engine/` と一致する |
+| `make au-install` の `auval` / `swift au/test/render.swift N` | AU の検証、インストールした AU が鳴って止まる |
+
 `tests/helpers/audio.js` (elevator-one 由来) が `AudioNode.prototype.connect` を包み、destination 手前に AnalyserNode を挟む。
 
 | project | 内容 |
 | --- | --- |
-| `audio-chromium` | 押下で鳴る / 離すと止まる、16パッド全発音、キーボード、blur、発音ごと・発音中のゆらぎ、pitch つまみで発音中の音程が動く、フィードバック最大で発散しない、最大設定でクリップしない |
+| `audio-chromium` (`window.stair.debug()` は worklet に問い合わせるので Promise を返す) | file:// で開いても鳴る、押下で鳴る / 離すと止まる、16パッド全発音、キーボード、blur、発音ごと・発音中のゆらぎ、pitch つまみで発音中の音程が動く、フィードバック最大で発散しない、最大設定でクリップしない |
 | `midi-chromium` | MIDI learn: モード切替、note / CC の割当と演奏、保存、再割当・解除、非対応ブラウザ |
-| `desktop-chromium` / `mobile-webkit` (WebKit は Web Audio を外して実行。CI の WebKit で AudioContext を動かすとページが固まるため) | 4x4 配置、ホームアイコン、横スクロールなし、ポインタ押下、マルチタッチ、つまみの値表示・2列×4行の並び・デスクトップで左配置、縦ドラッグとダブルクリック、狭幅の積み順 |
+| `desktop-chromium` / `mobile-webkit` (WebKit は Web Audio を外して実行。CI の WebKit で AudioContext を動かすとページが固まるため) | パッド名・つまみ定義がエンジンと一致、4x4 配置、ホームアイコン、横スクロールなし、ポインタ押下、マルチタッチ、つまみの値表示・2列×4行の並び・デスクトップで左配置、縦ドラッグとダブルクリック、狭幅の積み順 |

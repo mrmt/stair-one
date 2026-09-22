@@ -18,6 +18,17 @@ test('パッドが4x4に並ぶ', async ({ page }) => {
   expect(new Set(boxes.map(b => b.y)).size).toBe(4);
 });
 
+test('パッド名とつまみの範囲・初期値がエンジン (engine/) の定義と一致する', async ({ page }) => {
+  const meta = await page.evaluate(() => window.stair.meta());
+  await expect(page.locator('.pad .nm')).toHaveText(meta.pads);
+  for (const d of meta.params) {
+    const input = page.locator(`#s_${d.id}`);
+    const attr = await input.evaluate(el => ({ min: +el.min, max: +el.max, step: el.step ? +el.step : 1, value: +el.defaultValue }));
+    expect(attr, d.id).toEqual({ min: d.min, max: d.max, step: d.step, value: d.default });
+  }
+  expect(await page.locator('.knob input').count()).toBe(meta.params.length);
+});
+
 test('タイトルの左に親ディレクトリへ戻るアイコンがある', async ({ page }) => {
   const home = page.locator('header a.home');
   await expect(home).toBeVisible();
@@ -120,4 +131,56 @@ test('狭幅ではパッドの下につまみが来る', async ({ page, viewport
   const grid = await page.locator('#grid').boundingBox();
   const ctl = await page.locator('.controls').boundingBox();
   expect(ctl.y).toBeGreaterThanOrEqual(grid.y + grid.height);
+});
+
+test.describe('プラグイン (JUCE の WebView) の中', () => {
+  test.beforeEach(async ({ page }) => {
+    // JUCE の native integration (window.__JUCE__.backend) の偽物
+    await page.addInitScript(() => {
+      const listeners = [];
+      window.__sent = [];
+      window.__JUCE__ = { backend: {
+        emitEvent: (id, m) => window.__sent.push({ id, ...m }),
+        addEventListener: (id, fn) => listeners.push(fn),
+      } };
+      window.__fromHost = m => listeners.forEach(fn => fn(m));
+    });
+    await page.goto('/index.html');
+  });
+
+  test('準備ができたら知らせ、押下とつまみをホストへ送る', async ({ page }) => {
+    await expect.poll(() => page.evaluate(() => window.__sent.map(m => m.t))).toContain('ready');
+    await expect(page.locator('#midiLearn')).toBeHidden();
+    await expect(page.locator('header a.home')).toBeHidden();
+
+    const pad = page.locator('.pad').nth(3);
+    await pad.dispatchEvent('pointerdown', { pointerId: 3, bubbles: true });
+    await pad.dispatchEvent('pointerup', { pointerId: 3, bubbles: true });
+    await page.locator('#s_drive').fill('60');
+    const sent = await page.evaluate(() => window.__sent.filter(m => m.t !== 'ready'));
+    expect(sent).toEqual([
+      { id: 'stair', t: 'on', pad: 3 },
+      { id: 'stair', t: 'off', pad: 3 },
+      { id: 'stair', t: 'param', i: 8, v: 60 },
+    ]);
+    // Web Audio は使わない
+    expect(await page.evaluate(() => window.stair.voiceCount())).toBe(0);
+  });
+
+  test('ホストのつまみとパッドの点灯を画面に映し、送り返さない', async ({ page }) => {
+    await page.evaluate(() => window.__fromHost({ t: 'param', i: 9, v: 33 }));
+    await expect(page.locator('#s_volume')).toHaveValue('33');
+    await expect(page.locator('output[for="s_volume"]')).toHaveText('33');
+    await page.evaluate(() => window.__fromHost({ t: 'held', mask: 0b101 }));
+    await expect(page.locator('.pad').nth(0)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.pad').nth(1)).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.locator('.pad').nth(2)).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.evaluate(() => window.__sent.filter(m => m.t === 'param'))).toEqual([]);
+  });
+
+  test('キーボードでは弾かない (ホストのショートカットに任せる)', async ({ page }) => {
+    await page.keyboard.down('q');
+    await expect(page.locator('.pad').nth(4)).toHaveAttribute('aria-pressed', 'false');
+    expect(await page.evaluate(() => window.__sent.filter(m => m.t === 'on'))).toEqual([]);
+  });
 });

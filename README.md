@@ -2,6 +2,7 @@
 
 押している間だけ鳴る、16種類のノイズを出すシングルファイルの楽器。
 依存パッケージもビルド工程もなく、`index.html` を Chrome で開けばそれだけで動く。
+音声エンジンは Rust (`engine/`) で書き、wasm にして `index.html` に埋め込んでいる。
 
 リズム、テンポ、編曲、演奏スタートの概念はない。パッドを押すと鳴り、離すと止まる。
 
@@ -68,6 +69,32 @@
 
 bitcrush はつまみを持たず、常に軽くかかっている。
 
+## AU 版 (Logic Pro など)
+
+自分の Mac 用。Xcode (コマンドラインツール)・cmake・rustup が要る。JUCE は初回のビルドで自動で取ってくる。
+
+```sh
+make au-install      # ビルド → ~/Library/Audio/Plug-Ins/{Components,VST3} に入れる → auval で確認
+```
+
+- Logic では「ソフトウェア音源 → AU 音源 → mrmt → Stair One」
+- MIDI ノート 36–51 (Logic 表記 C1–D#2) がパッド 1–16。ベロシティは使わない
+- つまみはすべてホストのオートメーション対象。値はプロジェクトに保存される
+- 画面は Web 版と同じ。プラグインの中では MIDI learn とキーボード演奏を出さない (MIDI はホストから来る)
+- 音は Web 版と同じエンジン (`engine/`)。wasm とネイティブは 1 サンプル単位で同じ出力になる
+
+### 指定したバージョンの AU を作る
+
+Web 版の開発はそのまま続け、AU にしたい時点でタグを打つ。
+
+```sh
+git tag au-v0.2.0 && git push origin au-v0.2.0
+```
+
+GitHub Actions (`.github/workflows/au.yml`) が macOS でビルドし、`auval` と試し鳴らしを通してから、
+AU / VST3 / Standalone の zip を Release に添付する (インストール手順は `au/RELEASE_NOTES.md`)。
+手元で作るなら `git checkout au-v0.2.0 && make au-install`。どちらもプラグインのバージョンはタグの番号になる。
+
 ## 開発
 
 ```sh
@@ -75,5 +102,17 @@ npm ci
 npx playwright install chromium webkit   # 初回のみ
 npm test
 ```
+
+音 (パッチ・つまみの写像・エフェクト) を変えるときは `engine/` を編集し、wasm を作り直して `index.html` に埋め込む。
+Rust は rustup で入れる (バージョンは `engine/rust-toolchain.toml` で固定)。
+
+```sh
+scripts/build-web.sh                           # engine/ → wasm → index.html に埋め込み
+(cd engine && cargo test)                      # エンジンのテスト
+node tools/wasm-check.mjs                      # wasm とネイティブが 1 サンプル単位で一致するか
+engine/target/release/render play --pad 3      # 試聴用 WAV / スペクトログラム / 指標 (engine/README.md)
+```
+
+埋め込みを忘れると CI (`scripts/build-web.sh --check`) が落ちる。
 
 詳細は `docs/ARCHITECTURE.md`。

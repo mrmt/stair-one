@@ -3,3 +3,6 @@ node_modules/
 test-results/
 playwright-report/
 blob-report/
+reference/
+out/
+au/build/

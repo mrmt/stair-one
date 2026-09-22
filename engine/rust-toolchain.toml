@@ -1,0 +1,4 @@
+# wasm と AU で同じ出力を得るため、ツールチェーンを固定する
+[toolchain]
+channel = "1.93.1"
+targets = ["wasm32-unknown-unknown", "aarch64-apple-darwin", "x86_64-apple-darwin"]

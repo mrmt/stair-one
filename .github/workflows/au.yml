@@ -1,0 +1,66 @@
+name: AU
+
+# au-v* タグ: AU / VST3 / Standalone をビルドし、auval を通して GitHub Release に添付する
+# au/ や engine/ を変えた push: ビルドと auval だけ (Release は作らず、成果物として残す)
+# タグの push には paths は効かない (GitHub の仕様) ので、タグは常に走る
+on:
+  push:
+    tags: ['au-v*']
+    branches: ['**']
+    paths: ['au/**', 'engine/**', 'index.html', 'Makefile', '.github/workflows/au.yml']
+  pull_request:
+    paths: ['au/**', 'engine/**', 'index.html', 'Makefile', '.github/workflows/au.yml']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # バージョンを au-v* タグから取る
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      # rust-toolchain.toml のバージョンと、wasm32 / aarch64 / x86_64 の target を入れる
+      - name: Install Rust
+        working-directory: engine
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      # タグの時点の index.html が engine/ と合っていること (AU の画面に使う)
+      - name: index.html の埋め込みが最新か
+        run: scripts/build-web.sh --check
+
+      - name: Build
+        run: make au-dist
+
+      - name: Install and auval
+        run: make au-install
+
+      - name: 鳴って止まるか
+        run: for p in 1 9 16; do swift au/test/render.swift $p; done
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: stair-one-plugins
+          path: au/build/dist/*.zip
+          retention-days: 14
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/au-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" au/build/dist/*.zip \
+            --title "Stair One ${TAG#au-v} (AU / VST3)" \
+            --notes-file au/RELEASE_NOTES.md

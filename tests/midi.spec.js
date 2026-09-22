@@ -36,6 +36,8 @@ test.describe('Web MIDI あり', () => {
     await pad.click();
     await expect(pad).toHaveClass(/learn-sel/);
     await expect(pad).toHaveAttribute('aria-pressed', 'false');
+    // ボイス数は worklet から約 50ms ごとに届くので、少し待ってから見る
+    await page.waitForTimeout(300);
     expect(await voiceCount(page)).toBe(0);
 
     await page.keyboard.press('Escape');
@@ -55,7 +57,7 @@ test.describe('Web MIDI あり', () => {
 
     await send(page, [0x90, 36, 100]);
     await expect(pad).toHaveAttribute('aria-pressed', 'true');
-    expect(await voiceCount(page)).toBe(1);
+    await expect.poll(() => voiceCount(page)).toBe(1);
     await send(page, [0x80, 36, 0]);
     await expect(pad).toHaveAttribute('aria-pressed', 'false');
 

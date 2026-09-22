@@ -72,7 +72,7 @@ test('同じパッドでも発音ごとにパラメータが変わる', async ({
   const snaps = [];
   for (let n = 0; n < 4; n++) {
     await page.evaluate(() => window.stair.press(0, 'test'));
-    snaps.push(await page.evaluate(() => window.stair.debug().find(v => !v.released)));
+    snaps.push(await page.evaluate(async () => (await window.stair.debug()).find(v => !v.released)));
     await page.evaluate(() => window.stair.release(0, 'test'));
   }
   const roots = new Set(snaps.map(s => s.root.toFixed(4)));
@@ -83,9 +83,9 @@ test('同じパッドでも発音ごとにパラメータが変わる', async ({
 
 test('発音中もパラメータが揺れる', async ({ page }) => {
   await page.evaluate(() => window.stair.press(0, 'test'));
-  const a = await page.evaluate(() => window.stair.debug()[0].cut);
+  const a = await page.evaluate(async () => (await window.stair.debug())[0].cut);
   await page.waitForTimeout(600);
-  const b = await page.evaluate(() => window.stair.debug()[0].cut);
+  const b = await page.evaluate(async () => (await window.stair.debug())[0].cut);
   expect(a).not.toBe(b);
 });
 
@@ -93,7 +93,7 @@ test('pitch つまみで発音中の全ボイスの音程が上下する', async
   // ドリフトしないパッドで見る。Buzz 80Hz (osc: pitchCV → detune) と Comb Metal (karplus: 遅延時間を JS で計算)
   await page.evaluate(() => { window.stair.press(4, 'test'); window.stair.press(8, 'test'); });
   await page.waitForTimeout(400);
-  const snap = () => page.evaluate(() => Object.fromEntries(window.stair.debug().map(v => [v.pad, { d: v.cents - v.pitch, cv: v.cv, delay: v.delay }])));
+  const snap = () => page.evaluate(async () => Object.fromEntries((await window.stair.debug()).map(v => [v.pad, { d: v.cents - v.pitch, cv: v.cv, delay: v.delay }])));
 
   const base = await snap();
   expect(Math.abs(base[4].d)).toBeLessThan(100);
@@ -121,15 +121,15 @@ test('pitch つまみで発音中の全ボイスの音程が上下する', async
 
 test('フィードバックを最大にしてもループが発散しない', async ({ page }) => {
   test.setTimeout(40000);
-  // Chrome は BiquadFilter の状態が非有限になると警告を出す。発散の検出に使う
-  let bad = 0;
-  page.on('console', m => { if (/state is bad/.test(m.text())) bad++; });
   await page.locator('#s_dfb').fill('92');
   await page.locator('#s_dmix').fill('100');
   // くし形共鳴を持つパッドとカオス
   await page.evaluate(() => [8, 9, 14, 15].forEach(i => window.stair.press(i, 'test')));
-  await page.waitForTimeout(12000);
-  expect(bad).toBe(0);
+  // 発散すると出力が非有限 (NaN) になるか、ソフトクリップの上限に張り付く
+  const { peak, last } = await maxPeakOver(page, 12000, 200);
+  expect(Number.isFinite(last.peak)).toBe(true);
+  expect(peak).toBeGreaterThan(0.01);
+  expect(peak).toBeLessThan(0.95);
 });
 
 test('音量・歪み最大で16パッド同時押しでもクリップしない', async ({ page }) => {
@@ -140,4 +140,13 @@ test('音量・歪み最大で16パッド同時押しでもクリップしない
   const { peak } = await maxPeakOver(page, 4000, 100);
   expect(peak).toBeGreaterThan(0.05);
   expect(peak).toBeLessThan(1);
+});
+
+test('index.html を file:// で直接開いても鳴る', async ({ page }) => {
+  const url = new URL('../index.html', import.meta.url).href;
+  await page.goto(url);
+  await page.evaluate(() => window.stair.press(0, 'test'));
+  await expect.poll(() => page.evaluate(() => window.stair.voiceCount())).toBe(1);
+  const { peak } = await maxPeakOver(page, 800);
+  expect(peak).toBeGreaterThan(0.01);
 });
