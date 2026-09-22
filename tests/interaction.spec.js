@@ -18,6 +18,17 @@ test('パッドが4x4に並ぶ', async ({ page }) => {
   expect(new Set(boxes.map(b => b.y)).size).toBe(4);
 });
 
+test('パッド名とつまみの範囲・初期値がエンジン (engine/) の定義と一致する', async ({ page }) => {
+  const meta = await page.evaluate(() => window.stair.meta());
+  await expect(page.locator('.pad .nm')).toHaveText(meta.pads);
+  for (const d of meta.params) {
+    const input = page.locator(`#s_${d.id}`);
+    const attr = await input.evaluate(el => ({ min: +el.min, max: +el.max, step: el.step ? +el.step : 1, value: +el.defaultValue }));
+    expect(attr, d.id).toEqual({ min: d.min, max: d.max, step: d.step, value: d.default });
+  }
+  expect(await page.locator('.knob input').count()).toBe(meta.params.length);
+});
+
 test('タイトルの左に親ディレクトリへ戻るアイコンがある', async ({ page }) => {
   const home = page.locator('header a.home');
   await expect(home).toBeVisible();

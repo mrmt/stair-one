@@ -31,3 +31,44 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  # 音声エンジン (Rust)。index.html に埋め込んだ wasm が engine/ と一致するかも見る
+  engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install browsers
+        run: npx playwright install --with-deps chromium
+
+      # rust-toolchain.toml のバージョンと wasm32 target を入れる
+      - name: Install Rust
+        working-directory: engine
+        run: rustup show
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+
+      - name: cargo test
+        working-directory: engine
+        run: cargo test
+
+      - name: index.html の埋め込みが最新か
+        run: scripts/build-web.sh --check
+
+      - name: wasm とネイティブが一致するか
+        run: node tools/wasm-check.mjs
+
+      - name: 部品単位で Chromium と一致するか
+        run: |
+          (cd engine && cargo build --release --examples)
+          node tools/parity.mjs

@@ -2,6 +2,7 @@
 
 押している間だけ鳴る、16種類のノイズを出すシングルファイルの楽器。
 依存パッケージもビルド工程もなく、`index.html` を Chrome で開けばそれだけで動く。
+音声エンジンは Rust (`engine/`) で書き、wasm にして `index.html` に埋め込んでいる。
 
 リズム、テンポ、編曲、演奏スタートの概念はない。パッドを押すと鳴り、離すと止まる。
 
@@ -75,5 +76,17 @@ npm ci
 npx playwright install chromium webkit   # 初回のみ
 npm test
 ```
+
+音 (パッチ・つまみの写像・エフェクト) を変えるときは `engine/` を編集し、wasm を作り直して `index.html` に埋め込む。
+Rust は rustup で入れる (バージョンは `engine/rust-toolchain.toml` で固定)。
+
+```sh
+scripts/build-web.sh                           # engine/ → wasm → index.html に埋め込み
+(cd engine && cargo test)                      # エンジンのテスト
+node tools/wasm-check.mjs                      # wasm とネイティブが 1 サンプル単位で一致するか
+engine/target/release/render play --pad 3      # 試聴用 WAV / スペクトログラム / 指標 (engine/README.md)
+```
+
+埋め込みを忘れると CI (`scripts/build-web.sh --check`) が落ちる。
 
 詳細は `docs/ARCHITECTURE.md`。
