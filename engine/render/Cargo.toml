@@ -1,0 +1,13 @@
+[package]
+name = "render"
+version.workspace = true
+edition.workspace = true
+
+# 試聴・評価用 CLI。WAV + スペクトログラム PNG + 指標 JSON を出す
+[dependencies]
+stair-core = { path = "../core" }
+hound = "3"
+png = "0.17"
+rustfft = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

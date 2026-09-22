@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>STAIR ONE</title>
+<style>
+  /* 配色と書体は elevator-one と同じトークン */
+  :root{
+    --sea-top:#1D2A33;
+    --sea-mid:#16222C;
+    --sea-bot:#0E1720;
+    --panel:rgba(255,255,255,.055);
+    --panel-hi:rgba(255,255,255,.11);
+    --line:rgba(226,236,242,.19);
+    --ink:#E7E2CE;
+    --dim:rgba(214,226,232,.62);
+    --amber:#D8A340;
+    --disp:'Futura','Avenir Next Condensed','Helvetica Neue',sans-serif;
+    --data:'Menlo','Monaco',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{
+    background:var(--sea-mid);
+    background-image:linear-gradient(180deg,var(--sea-top) 0%,var(--sea-mid) 52%,var(--sea-bot) 100%);
+    background-attachment:fixed;
+    color:var(--ink);
+    font-family:var(--disp);
+    -webkit-font-smoothing:antialiased;
+    display:flex;flex-direction:column;
+    min-height:100dvh;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  :focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+  header{
+    display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;
+    padding:.8rem 1.2rem .7rem;
+    background:rgba(0,0,0,.21);
+    border-bottom:1px solid var(--line);
+  }
+  /* タイトル左のアイコン。親ディレクトリ (../) へ戻るリンク (elevator-one / two と同じ)。
+     文字を持たないので baseline 揃えから外し、行の中央に置く */
+  .home{display:flex;align-self:center;margin-right:-.4rem}
+  .home svg{width:1.15rem;height:1.15rem;display:block;fill:var(--ink)}
+  .mark{font-size:.95rem;letter-spacing:.42em;text-transform:uppercase}
+  .sub{font-size:.68rem;letter-spacing:.24em;color:var(--dim);text-transform:uppercase}
+  .ver{opacity:.6}
+
+  main{
+    flex:1;min-height:0;display:grid;
+    grid-template-columns:minmax(250px,300px) minmax(0,1fr);
+    gap:1px;background:var(--line);
+  }
+  section{background:rgba(0,0,0,.21);padding:1rem;min-width:0}
+  .eyebrow{
+    font-size:.6rem;letter-spacing:.3em;text-transform:uppercase;
+    color:var(--dim);margin-bottom:.85rem;
+  }
+
+  /* ---- 4x4 パッド ---- */
+  .pads{display:flex;align-items:center;justify-content:center}
+  .grid{
+    display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;
+    /* 画面の短辺に合わせた正方形 */
+    width:min(100%, calc(100dvh - 7rem));aspect-ratio:1;
+  }
+  .pad{
+    position:relative;display:flex;flex-direction:column;justify-content:space-between;
+    padding:.55rem .6rem;text-align:left;
+    border:1px solid var(--line);background:var(--panel);
+    /* 押している間だけ鳴るので、スクロール・長押しメニュー・選択を全部止める */
+    touch-action:none;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+    transition:background .25s,border-color .25s,color .25s,box-shadow .25s;
+    overflow:hidden;
+  }
+  .pad:hover{background:var(--panel-hi)}
+  .pad .no{font-family:var(--data);font-size:.62rem;color:var(--dim)}
+  .pad .nm{font-size:clamp(.5rem,1.35vw,.78rem);letter-spacing:.14em;line-height:1.25;text-transform:uppercase}
+  .pad .key{position:absolute;right:.5rem;top:.45rem;font-family:var(--data);font-size:.6rem;color:var(--dim);opacity:.7}
+  .pad[aria-pressed="true"]{
+    background:var(--amber);border-color:var(--amber);color:#101A22;
+    box-shadow:0 0 28px rgba(216,163,64,.45);
+    transition:none;
+    animation:flicker .11s steps(2) infinite;
+  }
+  .pad[aria-pressed="true"] .no,.pad[aria-pressed="true"] .key{color:#101A22}
+  @keyframes flicker{50%{background:#E3B55A}}
+
+  /* ---- つまみ ---- */
+  .controls{overflow-y:auto}
+  /* 大8個は2列×4行。列優先で流し、左列 attack〜pitch、右列 delay〜phaser にする */
+  .knobs{display:grid;grid-template-columns:repeat(2,1fr);grid-template-rows:repeat(4,auto);grid-auto-flow:column;gap:.9rem .6rem}
+  .knobs.small{grid-template-rows:none;grid-auto-flow:row;margin-top:1.1rem;padding-top:1rem;border-top:1px solid var(--line)}
+  .ctl{position:relative;display:flex;flex-direction:column;align-items:center;gap:.2rem;padding:.25rem 0;text-align:center}
+  .knob{position:relative;display:block;width:4.2rem;height:4.2rem;cursor:ns-resize;touch-action:none;user-select:none;-webkit-user-select:none}
+  .small .knob{width:2.9rem;height:2.9rem}
+  .knob svg{display:block;width:100%;height:100%;overflow:visible}
+  .knob .track,.knob .val{fill:none;stroke-width:5}
+  .knob .track{stroke:var(--line);stroke-linecap:round}
+  .knob .val{stroke:var(--amber)}
+  .knob .body{fill:var(--panel-hi);stroke:var(--line);stroke-width:1.5}
+  .knob .ptr{stroke:var(--ink);stroke-width:4;stroke-linecap:round}
+  /* 実体の range input はつまみに透明で重ねる。キーボード操作・読み上げ・MIDI 割当・テストの fill を担う */
+  .knob input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;pointer-events:none}
+  .knob:has(input:focus-visible) svg{outline:2px solid var(--amber);outline-offset:3px;border-radius:50%}
+  .ctl .lb{font-size:.6rem;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+  .small .ctl .lb{font-size:.55rem}
+  .ctl output{font-family:var(--data);font-size:.6rem;color:var(--amber)}
+  .ctl .midi-badge{position:absolute;top:0;right:.1rem}
+  .hint{font-size:.6rem;letter-spacing:.12em;color:var(--dim);line-height:1.7;margin-top:1.1rem}
+  .hint a{color:inherit}
+
+  /* ---- MIDI learn ---- */
+  .midi{margin-left:auto;display:flex;gap:.55rem;align-items:center;align-self:center}
+  .tbtn{
+    border:1px solid var(--line);padding:.42rem .8rem;
+    font-size:.64rem;letter-spacing:.2em;text-transform:uppercase;white-space:nowrap;
+    background:var(--panel);transition:background .18s,border-color .18s,color .18s;
+  }
+  .tbtn:hover{background:var(--panel-hi)}
+  .tbtn[aria-pressed="true"]{background:var(--amber);color:#101A22;border-color:var(--amber)}
+  .tbtn[disabled]{opacity:.35;cursor:not-allowed}
+  #midiStatus.warn{color:var(--amber)}
+  .midi-badge{font-family:var(--data);font-size:.58rem;letter-spacing:0;color:var(--amber);text-transform:none}
+  .pad .midi-badge{position:absolute;left:2.1rem;top:.5rem}
+  .pad[aria-pressed="true"] .midi-badge{color:#101A22}
+  /* learn 中: 割り当てられる要素を破線で示す。つまみは値を動かさず、ラベルごと選ぶ */
+  body.learning .pad,body.learning .ctl{outline:1px dashed rgba(216,163,64,.55);outline-offset:2px;cursor:copy}
+  body.learning .ctl input{pointer-events:none}
+  body.learning .learn-sel{outline:2px solid var(--amber);animation:sel .5s steps(2) infinite}
+  @keyframes sel{50%{outline-color:transparent}}
+
+  /* 狭幅: パッドを上、つまみを下に積んでページをスクロールさせる (DOM はつまみが先なので order で入れ替える) */
+  @media (max-width:760px){
+    main{grid-template-columns:1fr}
+    .pads{order:-1}
+    .grid{width:100%;gap:.4rem}
+    .pad{padding:.4rem}
+    .pad .nm{font-size:.52rem;letter-spacing:.08em}
+    .pad .key{display:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <!-- aria-label を "Back to top" にするとコンテンツブロッカーに隠される (elevator-one #39) ので Home にする -->
+  <a class="home" href="../" aria-label="Home"><svg viewBox="0 0 512 512" aria-hidden="true"><g><path fill-rule="evenodd" d="M48 0H464A48 48 0 0 1 512 48V464A48 48 0 0 1 464 512H48A48 48 0 0 1 0 464V48A48 48 0 0 1 48 0ZM72 34H440A38 38 0 0 1 478 72V440A38 38 0 0 1 440 478H72A38 38 0 0 1 34 440V72A38 38 0 0 1 72 34Z"/><path d="M149 122L241 210L241 270L170 208V381H128V208L59 270V210Z"/><path d="M342 135H385V310L457 247V306L364 394L272 307V247L342 310Z"/></g></svg></a>
+  <span class="mark">Stair One</span>
+  <span class="sub">16 noise pads <span class="ver">v0.1</span></span>
+  <div class="midi">
+    <span class="sub" id="midiStatus" role="status"></span>
+    <button class="tbtn" id="midiClear" hidden>clear all</button>
+    <button class="tbtn" id="midiLearn" aria-pressed="false">MIDI learn</button>
+  </div>
+</header>
+<main>
+  <section class="controls">
+    <!-- 列優先: 左列 attack / decay / release / pitch、右列 delay time / delay feedback / delay mix / phaser -->
+    <div class="knobs">
+      <label class="ctl"><span class="knob"><input type="range" id="s_attack" min="0" max="100" value="21"></span><span class="lb">attack</span><output for="s_attack"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_decay" min="0" max="100" value="60"></span><span class="lb">decay</span><output for="s_decay"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_release" min="0" max="100" value="53"></span><span class="lb">release</span><output for="s_release"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_pitch" min="-12" max="12" step="0.1" value="0"></span><span class="lb">pitch</span><output for="s_pitch"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dtime" min="0" max="100" value="70"></span><span class="lb">delay time</span><output for="s_dtime"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dfb" min="0" max="92" value="40"></span><span class="lb">delay feedback</span><output for="s_dfb"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_dmix" min="0" max="100" value="25"></span><span class="lb">delay mix</span><output for="s_dmix"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_phaser" min="0" max="100" value="20"></span><span class="lb">phaser</span><output for="s_phaser"></output></label>
+    </div>
+    <div class="knobs small">
+      <label class="ctl"><span class="knob"><input type="range" id="s_drive" min="0" max="100" value="15"></span><span class="lb">distortion</span><output for="s_drive"></output></label>
+      <label class="ctl"><span class="knob"><input type="range" id="s_volume" min="0" max="100" value="80"></span><span class="lb">volume</span><output for="s_volume"></output></label>
+    </div>
+    <p class="hint">押している間だけ鳴る / hold to sound<br>keys: 1234 QWER ASDF ZXCV<br>knob: drag ↕ / shift で微調整 / double-click で既定値<br><a href="../privacy/">privacy</a></p>
+  </section>
+  <section class="pads">
+    <div class="grid" id="grid" role="group" aria-label="pads"></div>
+  </section>
+</main>
+<script>
+(() => {
+'use strict';
+
+// ============================================================
+// 乱数ユーティリティ
+// ============================================================
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+function gauss(){
+  let u = 0; while (u === 0) u = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
+}
+// パッチ定義の値を1回分に確定させる。
+// [数, 数] は範囲からの一様乱数、文字列の配列は1つ選ぶ、それ以外はそのまま
+function R(x){
+  if (Array.isArray(x)) {
+    if (x.length === 2 && typeof x[0] === 'number') return rnd(x[0], x[1]);
+    return x[Math.floor(Math.random() * x.length)];
+  }
+  return x;
+}
+// 平均回帰つきランダムウォーク。発音中の「少しの揺れ」は全部これで作る
+function W(base, spread, revert = 1){
+  return {
+    base, v: base,
+    step(dt){
+      this.v += (this.base - this.v) * Math.min(1, revert * dt) + gauss() * spread * Math.sqrt(dt);
+      return this.v;
+    },
+  };
+}
+
+// ============================================================
+// 16 パッチ
+//   oct: 1=32′ (C0≒16.35Hz 基準) / 2=16′ / 4=8′ / 8=4′
+//   lfo.rate は Hz、lfo.depth は cent (noise は音量比、karplus は cent 換算)
+// ============================================================
+const ANY_LFO = ['sine', 'square', 'sawtooth', 'sh'];
+const PATCHES = [
+  { name: 'Sub Saw 32′', root: [0, 7], gain: .8,
+    layers: [
+      { kind: 'osc', wave: 'sawtooth', oct: 1, count: 3, spread: [4, 14], level: .9, lfo: { shape: ['sine', 'sawtooth'], rate: [1, 4], depth: [3, 15] } },
+      { kind: 'osc', wave: 'sawtooth', oct: 2, count: 2, spread: [6, 20], level: .5, lfo: { shape: ['sine', 'sh'], rate: [2, 7], depth: [4, 20] } },
+    ],
+    drift: { up: .3, down: .3, rate: [5, 30] },
+    filter: { type: 'lowpass', cut: [90, 400], q: [2, 6], sweep: [.05, .3] },
+    sus: [.7, .9] },
+
+  { name: 'S&H Square 16′', root: [0, 12], gain: .6,
+    layers: [
+      { kind: 'osc', wave: 'square', oct: 2, count: 2, spread: [2, 10], level: .8, lfo: { shape: 'sh', rate: [4, 14], depth: [200, 1200] } },
+    ],
+    drift: { up: .25, down: .25, rate: [10, 60] },
+    filter: { type: 'lowpass', cut: [400, 1500], q: [4, 10], sweep: [.1, .5] },
+    sus: [.6, .9] },
+
+  // 高Qバンドパスで大半が削れるので、ゲインは他より大きく取る
+  { name: 'Noise Rise', gain: 12,
+    layers: [
+      { kind: 'noise', level: 1, lfo: { shape: ['sh', 'square'], rate: [1, 8], depth: [0, .5] } },
+    ],
+    filter: { type: 'bandpass', cut: [150, 500], q: [8, 18], open: .85, sweep: [.3, .9], series: .5 },
+    sus: [.8, 1] },
+
+  { name: 'Moiré 7', root: [0, 12], gain: .5,
+    layers: [
+      { kind: 'osc', wave: 'sawtooth', oct: 4, count: 7, spread: [8, 35], level: 1, lfo: { shape: ['sine', 'sawtooth'], rate: [1, 3], depth: [2, 10] } },
+    ],
+    drift: { up: .2, down: .2, rate: [3, 15] },
+    filter: { type: 'lowpass', cut: [800, 3000], q: [1, 4], open: .2, sweep: [.05, .3] },
+    sus: [.7, .9] },
+
+  { name: 'Buzz 80Hz', root: [0, 12], gain: .55,
+    layers: [
+      { kind: 'osc', wave: 'square', oct: 2, count: 2, spread: [3, 10], level: .7, lfo: { shape: 'square', rate: [60, 100], depth: [300, 1200] } },
+      { kind: 'osc', wave: 'sawtooth', oct: 1, count: 1, level: .6, lfo: { shape: 'sawtooth', rate: [30, 90], depth: [100, 600] } },
+    ],
+    filter: { type: 'lowpass', cut: [600, 2500], q: [3, 9], sweep: [.05, .4] },
+    sus: [.6, .9] },
+
+  { name: 'Random Arp', root: [0, 12], gain: .55,
+    layers: [
+      { kind: 'osc', wave: 'square', oct: 8, count: 2, spread: [3, 9], level: .8, lfo: { shape: 'sine', rate: [4, 8], depth: [5, 30] } },
+    ],
+    arp: { rate: [6, 16], scale: ['minor', 'whole', 'chrom', 'fifths', 'odd'], range: [1, 3.99] },
+    filter: { type: 'lowpass', cut: [700, 2500], q: [6, 14], sweep: [.1, .6] },
+    sus: [.7, 1] },
+
+  { name: 'Falling Res', root: [0, 12], gain: .4,
+    layers: [
+      { kind: 'osc', wave: 'sawtooth', oct: 4, count: 3, spread: [5, 15], level: .8, lfo: { shape: 'sawtooth', rate: [1, 5], depth: [10, 60] } },
+    ],
+    drift: { up: 0, down: 1, rate: [60, 240], max: 3600 },
+    filter: { type: 'lowpass', cut: [1500, 5000], q: [18, 28], open: .1, sweep: [.2, .7], series: .6 },
+    sus: [.6, .9] },
+
+  { name: 'Siren', root: [0, 12], gain: 2.5,
+    layers: [
+      { kind: 'osc', wave: 'square', oct: 8, count: 2, spread: [10, 30], level: .7, lfo: { shape: 'sine', rate: [1, 6], depth: [100, 700] } },
+      { kind: 'noise', level: .3 },
+    ],
+    drift: { up: 1, down: 0, rate: [80, 300], max: 3600 },
+    filter: { type: 'bandpass', cut: [800, 2000], q: [3, 8], sweep: [.05, .3] },
+    sus: [.7, 1] },
+
+  { name: 'Comb Metal', root: [0, 12], gain: 2.5,
+    layers: [
+      { kind: 'karplus', oct: 8, level: .25, excite: [.01, .04], pluck: [.5, 3], fb: [.97, .995], damp: [3000, 9000], lfo: { shape: 'sine', rate: [1, 6], depth: [3, 20] } },
+      { kind: 'karplus', oct: [11.3, 12.7], level: .2, excite: [.01, .03], pluck: [.3, 2], fb: [.96, .99], damp: [4000, 10000] },
+    ],
+    filter: { type: 'highpass', cut: [80, 200], q: [1, 3] },
+    sus: [.8, 1] },
+
+  { name: 'Bowed Comb', root: [0, 12], gain: 14,
+    layers: [
+      { kind: 'karplus', oct: 4, level: .4, excite: [.08, .2], pluck: 0, fb: [.9, .98], damp: [1500, 5000], lfo: { shape: 'sh', rate: [1, 4], depth: [5, 40] } },
+    ],
+    drift: { up: .5, down: .5, rate: [10, 60] },
+    filter: { type: 'bandpass', cut: [300, 1200], q: [2, 6], sweep: [.05, .4] },
+    sus: [.8, 1] },
+
+  { name: 'Tape Cloud', gain: 1.2,
+    layers: [
+      { kind: 'grain', level: .9, density: [15, 40], dur: [.04, .18], rev: .2, spread: [0, 700], rate: [.7, 1.2],
+        wow: { rate: [.3, 1.5], depth: [20, 80] }, flutter: { rate: [6, 14], depth: [5, 25] } },
+    ],
+    filter: { type: 'lowpass', cut: [1500, 6000], q: [1, 3], sweep: [.05, .3] },
+    sus: [.8, 1] },
+
+  { name: 'Reverse Flutter', gain: 2.5,
+    layers: [
+      { kind: 'grain', level: .9, density: [6, 18], dur: [.1, .4], rev: .9, spread: [0, 1200], rate: [.5, 1],
+        wow: { rate: [1, 3], depth: [50, 200] }, flutter: { rate: [10, 20], depth: [20, 60] } },
+    ],
+    filter: { type: 'bandpass', cut: [500, 2000], q: [2, 6], sweep: [.05, .3], lfo: { shape: 'sh', rate: [2, 8], depth: [300, 1200] } },
+    sus: [.8, 1] },
+
+  // 出力段のコンプで潰れるため、ゲインの比では音量が下がらない。出力 RMS の実測で旧 1.1 の約70%になる値
+  { name: 'S&H Filter Noise', gain: .47,
+    layers: [
+      { kind: 'noise', level: 1 },
+    ],
+    filter: { type: 'lowpass', cut: [400, 2000], q: [12, 22], series: .7, sweep: [0, .2], lfo: { shape: 'sh', rate: [5, 20], depth: [800, 2400] } },
+    sus: [.7, 1] },
+
+  { name: 'Growl 32′', root: [0, 7], gain: .6,
+    layers: [
+      { kind: 'osc', wave: 'square', oct: 1, count: 2, spread: [2, 8], level: .8, lfo: { shape: 'sawtooth', rate: [25, 55], depth: [200, 900] } },
+      { kind: 'osc', wave: 'sawtooth', oct: 2, count: 2, spread: [4, 12], level: .6, lfo: { shape: 'sh', rate: [1, 5], depth: [20, 100] } },
+    ],
+    drift: { up: .3, down: .3, rate: [5, 40] },
+    filter: { type: 'lowpass', cut: [120, 600], q: [6, 14], sweep: [.1, .6], series: .5 },
+    sus: [.7, .9] },
+
+  { name: 'Arp Comb', root: [0, 12], gain: 1.4,
+    layers: [
+      { kind: 'karplus', oct: 8, level: .22, excite: [.01, .03], pluck: [4, 10], fb: [.95, .99], damp: [2500, 7000] },
+      { kind: 'osc', wave: 'square', oct: 4, count: 1, level: .25, lfo: { shape: 'sh', rate: [3, 12], depth: [5, 40] } },
+    ],
+    arp: { rate: [4, 12], scale: ['minor', 'fifths', 'dim', 'odd'], range: [1, 2.99] },
+    filter: { type: 'lowpass', cut: [1000, 4000], q: [2, 8], sweep: [.05, .4] },
+    sus: [.7, 1] },
+
+  { name: 'Chaos', root: [0, 12], gain: 1.2,
+    layers: [
+      { kind: 'osc', wave: ['sawtooth', 'square'], oct: [1, 3], count: [1, 4.99], spread: [0, 60], level: .6, lfo: { shape: ANY_LFO, rate: [1, 100], depth: [0, 1500] } },
+      { kind: 'osc', wave: ['sawtooth', 'square'], oct: [2, 8], count: [1, 4.99], spread: [0, 60], level: .5, lfo: { shape: ANY_LFO, rate: [1, 100], depth: [0, 1500] } },
+      { kind: 'noise', level: [0, .5], lfo: { shape: ANY_LFO, rate: [1, 30], depth: [0, 1] } },
+      { kind: 'karplus', oct: [3, 12], level: .15, excite: [.01, .05], pluck: [0, 6], fb: [.9, .99], damp: [1000, 8000] },
+      { kind: 'grain', level: .5, density: [5, 30], dur: [.03, .3], rev: .5, spread: [0, 1500], rate: [.5, 1.5],
+        wow: { rate: [.3, 3], depth: [0, 150] }, flutter: { rate: [6, 20], depth: [0, 60] } },
+    ],
+    arp: { p: .5, rate: [3, 18], scale: ['chrom', 'odd', 'whole'], range: [1, 3.99] },
+    drift: { up: .35, down: .35, rate: [10, 300], max: 3600 },
+    filter: { type: ['lowpass', 'bandpass', 'highpass'], cut: [200, 4000], q: [1, 20], series: .5, sweep: [0, 1] },
+    sus: [.4, 1] },
+];
+const KEYS = ['Digit1','Digit2','Digit3','Digit4','KeyQ','KeyW','KeyE','KeyR','KeyA','KeyS','KeyD','KeyF','KeyZ','KeyX','KeyC','KeyV'];
+const KEY_LABEL = '1234QWERASDFZXCV';
+const SCALES = {
+  minor: [0, 3, 5, 7, 10], whole: [0, 2, 4, 6, 8, 10], chrom: [0,1,2,3,4,5,6,7,8,9,10,11],
+  fifths: [0, 7], dim: [0, 3, 6, 9], odd: [0, 1, 6, 11],
+};
+const C0 = 16.3516;
+// フィードバックループ用の飽和カーブ。原点の傾きを 1 に保ち (ループ利得を上げない)、±1 超は端で頭打ち
+const SAT_CURVE = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh(i / 512 - 1));
+
+// ============================================================
+// スライダ
+// ============================================================
+const $ = id => document.getElementById(id);
+// 時間系は対数カーブ
+const logMap = (x, a, b) => a * Math.pow(b / a, x / 100);
+const P = {
+  attack:  () => logMap(+$('s_attack').value, .002, 4),
+  decay:   () => logMap(+$('s_decay').value, .02, 6),
+  release: () => logMap(+$('s_release').value, .01, 8),
+  pitch:   () => +$('s_pitch').value,   // 半音
+  drive:   () => +$('s_drive').value / 100,
+  phaser:  () => +$('s_phaser').value / 100,
+  dtime:   () => logMap(+$('s_dtime').value, .02, 1.2),
+  dfb:     () => +$('s_dfb').value / 100,
+  dmix:    () => +$('s_dmix').value / 100,
+  volume:  () => +$('s_volume').value / 100,
+};
+const fmtSec = s => s < 1 ? `${Math.round(s * 1000)}ms` : `${s.toFixed(2)}s`;
+const fmtPct = x => `${Math.round(x * 100)}`;
+const fmtSt = st => `${st >= 0 ? '+' : ''}${st.toFixed(1)} st`;
+const FMT = { attack: fmtSec, decay: fmtSec, release: fmtSec, dtime: fmtSec, pitch: fmtSt,
+  drive: fmtPct, phaser: fmtPct, dfb: fmtPct, dmix: fmtPct, volume: fmtPct };
+// bitcrush はつまみを持たず、軽くかけたままにする
+const CRUSH = .2;
+
+function updateReadouts(){
+  for (const k of Object.keys(P)) document.querySelector(`output[for="s_${k}"]`).textContent = FMT[k](P[k]());
+}
+
+// ---- つまみ ----
+// 弧は -135°〜+135°。pathLength=100 にして stroke-dasharray で値の範囲だけ描く
+const KNOB_ARC = 'M18.89 81.11 A44 44 0 1 1 81.11 81.11';
+const KNOB_SVG = `<svg viewBox="0 0 100 100" aria-hidden="true"><path class="track" d="${KNOB_ARC}" pathLength="100"/><path class="val" d="${KNOB_ARC}" pathLength="100"/><circle class="body" cx="50" cy="50" r="32"/><line class="ptr" x1="50" y1="50" x2="50" y2="25"/></svg>`;
+
+function drawKnob(input){
+  const min = +input.min, max = +input.max;
+  const f = (+input.value - min) / (max - min);
+  const zero = min < 0 ? -min / (max - min) : 0;   // 両極 (pitch) は中央から弧を伸ばす
+  const a = Math.min(f, zero), b = Math.max(f, zero);
+  const knob = input.parentElement;
+  knob.querySelector('.val').style.strokeDasharray = `0 ${a * 100} ${(b - a) * 100} 100`;
+  knob.querySelector('.ptr').setAttribute('transform', `rotate(${-135 + 270 * f} 50 50)`);
+}
+
+for (const input of document.querySelectorAll('.knob input')) {
+  const knob = input.parentElement;
+  knob.insertAdjacentHTML('afterbegin', KNOB_SVG);
+  const def = input.value;
+  const range = () => +input.max - +input.min;
+  const setValue = x => {
+    const prev = input.value;
+    input.value = String(x);   // min / max / step への丸めは input が行う
+    if (input.value !== prev) input.dispatchEvent(new Event('input', { bubbles: true }));
+  };
+  input.addEventListener('input', () => { drawKnob(input); updateReadouts(); applyFx(); });
+
+  // 縦ドラッグ: 150px で全域、Shift で 4 倍細かく
+  let drag = null;
+  knob.addEventListener('pointerdown', e => {
+    if (learning) return;   // learn 中は .ctl 側で割当先の選択になる
+    e.preventDefault();
+    try { knob.setPointerCapture(e.pointerId); } catch (err) {}
+    input.focus({ preventScroll: true });
+    drag = { id: e.pointerId, y: e.clientY, v: +input.value };
+  });
+  knob.addEventListener('pointermove', e => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const px = e.shiftKey ? 600 : 150;
+    setValue(drag.v + (drag.y - e.clientY) / px * range());
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) knob.addEventListener(type, () => { drag = null; });
+  knob.addEventListener('wheel', e => {
+    if (learning) return;
+    e.preventDefault();
+    setValue(+input.value - Math.sign(e.deltaY) * range() / (e.shiftKey ? 400 : 100));
+  }, { passive: false });
+  knob.addEventListener('dblclick', e => { e.preventDefault(); setValue(def); });
+  drawKnob(input);
+}
+updateReadouts();
+
+// ============================================================
+// オーディオグラフ (最初のパッド押下で作る)
+// ============================================================
+let ctx = null, resuming = null, voiceBus, fx = {}, noiseBuf, shBuf, tapeBuf, tapeRevBuf, lastTick = 0;
+const voices = [];
+const SH_STEPS = 64;
+
+function gainNode(v){ const g = ctx.createGain(); g.gain.value = v; return g; }
+
+function makeBuffers(){
+  const sr = ctx.sampleRate;
+  // ホワイトノイズ 2秒
+  noiseBuf = ctx.createBuffer(1, sr * 2, sr);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+
+  // sample & hold: 1秒に SH_STEPS 段。playbackRate = rate / SH_STEPS で任意の周期にする
+  shBuf = ctx.createBuffer(1, sr, sr);
+  const sd = shBuf.getChannelData(0), step = sr / SH_STEPS;
+  for (let s = 0; s < SH_STEPS; s++) {
+    const val = Math.random() * 2 - 1;
+    for (let i = Math.floor(s * step); i < Math.floor((s + 1) * step); i++) sd[i] = val;
+  }
+
+  // グラニュラー用の素材テープ 4秒。グライドするノコギリ、ノイズの塊、クリックを混ぜた汚い音
+  tapeBuf = ctx.createBuffer(1, sr * 4, sr);
+  const td = tapeBuf.getChannelData(0);
+  const saws = [0, 1, 2].map(() => ({ f: rnd(60, 400), g: rnd(-.3, .3), ph: 0 }));
+  let burst = 0, lp = 0;
+  for (let i = 0; i < td.length; i++) {
+    const t = i / sr;
+    let x = 0;
+    for (const s of saws) { s.ph = (s.ph + s.f * Math.pow(2, s.g * t) / sr) % 1; x += (s.ph * 2 - 1) * .25; }
+    if (Math.random() < 3 / sr) burst = 1;
+    burst *= .9996;
+    lp += (Math.random() * 2 - 1 - lp) * .2;
+    x += lp * burst * 1.2;
+    if (Math.random() < 8 / sr) x += rnd(-1, 1);
+    x *= .6 + .4 * Math.sin(t * 2.3) * Math.sin(t * .7);
+    td[i] = Math.tanh(x);
+  }
+  tapeRevBuf = ctx.createBuffer(1, td.length, sr);
+  tapeRevBuf.getChannelData(0).set(Float32Array.from(td).reverse());
+}
+
+// ビットクラッシャー。AudioWorklet を外部ファイルにしないよう Blob URL で読み込む
+const CRUSHER_SRC = `
+class Crusher extends AudioWorkletProcessor {
+  static get parameterDescriptors(){ return [
+    { name: 'bits', defaultValue: 16, minValue: 1, maxValue: 16 },
+    { name: 'down', defaultValue: 1, minValue: 1, maxValue: 64 },
+  ]; }
+  constructor(){ super(); this.h = new Float32Array(8); this.c = new Float32Array(8); }
+  process(inputs, outputs, p){
+    const inp = inputs[0], out = outputs[0];
+    if (!inp || !inp.length) return true;
+    for (let ch = 0; ch < out.length; ch++) {
+      const x = inp[ch] || inp[0], y = out[ch];
+      for (let n = 0; n < y.length; n++) {
+        const b = p.bits.length > 1 ? p.bits[n] : p.bits[0];
+        const d = p.down.length > 1 ? p.down[n] : p.down[0];
+        if (++this.c[ch] >= d) { this.c[ch] = 0; const q = Math.pow(2, b - 1); this.h[ch] = Math.round(x[n] * q) / q; }
+        y[n] = this.h[ch];
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('crusher', Crusher);
+`;
+
+function driveCurve(a){
+  const n = 2048, c = new Float32Array(n), k = 1 + a * a * 60, b = .15 * a;
+  const off = Math.tanh(k * b), norm = Math.tanh(k);
+  for (let i = 0; i < n; i++) {
+    const x = i / (n - 1) * 2 - 1;
+    c[i] = (Math.tanh(k * (x + b)) - off) / norm;
+  }
+  return c;
+}
+
+function ensureAudio(){
+  if (ctx) {
+    // resume は重ねて呼ばない
+    if (ctx.state !== 'running' && !resuming) resuming = ctx.resume().catch(() => {}).finally(() => { resuming = null; });
+    return true;
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return false;   // Web Audio が無い環境では、押下と表示だけが動く
+  ctx = new AC({ latencyHint: 'interactive' });
+  makeBuffers();
+
+  voiceBus = gainNode(.6);
+
+  // --- ディストーション ---
+  fx.distOut = gainNode(1);
+  fx.distDry = gainNode(1); fx.distWet = gainNode(0);
+  fx.shaper = ctx.createWaveShaper(); fx.shaper.oversample = '4x';
+  voiceBus.connect(fx.distDry).connect(fx.distOut);
+  voiceBus.connect(fx.shaper).connect(fx.distWet).connect(fx.distOut);
+
+  // --- ビットクラッシャー (Worklet 読み込みまでは dry のみ) ---
+  fx.crushOut = gainNode(1);
+  fx.crushDry = gainNode(1); fx.crushWet = gainNode(0);
+  fx.distOut.connect(fx.crushDry).connect(fx.crushOut);
+  fx.crushWet.connect(fx.crushOut);
+  if (ctx.audioWorklet) {
+    const url = URL.createObjectURL(new Blob([CRUSHER_SRC], { type: 'application/javascript' }));
+    ctx.audioWorklet.addModule(url).then(() => {
+      fx.crusher = new AudioWorkletNode(ctx, 'crusher');
+      fx.distOut.connect(fx.crusher).connect(fx.crushWet);
+      applyFx();
+    }).catch(() => {});
+  }
+
+  // --- フェーザー: allpass 6段 + LFO(detune) + フィードバック ---
+  fx.phOut = gainNode(1);
+  fx.phDry = gainNode(1); fx.phWet = gainNode(0);
+  fx.phIn = gainNode(1);
+  fx.crushOut.connect(fx.phDry).connect(fx.phOut);
+  fx.crushOut.connect(fx.phIn);
+  fx.phLfo = ctx.createOscillator(); fx.phLfo.frequency.value = .3;
+  fx.phDepth = gainNode(1800);
+  fx.phLfo.connect(fx.phDepth); fx.phLfo.start();
+  let prev = fx.phIn;
+  fx.stages = [250, 520, 900, 1500, 2400, 3600].map(f => {
+    const ap = ctx.createBiquadFilter(); ap.type = 'allpass'; ap.frequency.value = f; ap.Q.value = .7;
+    fx.phDepth.connect(ap.detune);
+    prev.connect(ap); prev = ap;
+    return ap;
+  });
+  // ループには DelayNode が必須
+  fx.phFb = gainNode(0); fx.phFbDelay = ctx.createDelay(.01); fx.phFbDelay.delayTime.value = .001;
+  prev.connect(fx.phFb).connect(fx.phFbDelay).connect(fx.phIn);
+  prev.connect(fx.phWet).connect(fx.phOut);
+
+  // --- ステレオディレイ: L/R 別時間 + 交差フィードバック ---
+  fx.sum = gainNode(1);
+  fx.phOut.connect(fx.sum);
+  fx.dL = ctx.createDelay(2.5); fx.dR = ctx.createDelay(2.5);
+  const lpL = ctx.createBiquadFilter(), lpR = ctx.createBiquadFilter();
+  lpL.frequency.value = lpR.frequency.value = 4500;
+  // 既定 Q (1dB) の山とフィードバック最大 0.92 でループ利得が 1 を超えるので山を消す
+  lpL.Q.value = lpR.Q.value = -6;
+  fx.fbL = gainNode(0); fx.fbR = gainNode(0);
+  fx.phOut.connect(fx.dL);
+  fx.phOut.connect(gainNode(.7)).connect(fx.dR);
+  fx.dL.connect(lpL).connect(fx.fbL).connect(fx.dR);
+  fx.dR.connect(lpR).connect(fx.fbR).connect(fx.dL);
+  const merger = ctx.createChannelMerger(2);
+  fx.dL.connect(merger, 0, 0); fx.dR.connect(merger, 0, 1);
+  fx.dWet = gainNode(0);
+  merger.connect(fx.dWet).connect(fx.sum);
+  fx.dWalkL = W(0, .004, .5); fx.dWalkR = W(0, .004, .5);
+
+  // --- 出力: コンプ → 音量 → tanh ソフトクリップ (ピークを 0.95 未満に抑える) ---
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.knee.value = 12; comp.ratio.value = 6;
+  comp.attack.value = .005; comp.release.value = .2;
+  fx.master = gainNode(0);
+  const clip = ctx.createWaveShaper();
+  const cc = new Float32Array(1024);
+  for (let i = 0; i < cc.length; i++) { const x = i / (cc.length - 1) * 2 - 1; cc[i] = .95 * Math.tanh(2 * x) / Math.tanh(2); }
+  clip.curve = cc;
+  fx.sum.connect(comp).connect(fx.master).connect(clip).connect(ctx.destination);
+
+  applyFx();
+  setInterval(tick, 30);
+  return true;
+}
+
+let lastDrive = -1;
+function applyFx(){
+  if (!ctx) return;
+  const t = ctx.currentTime, k = .05;
+  const d = P.drive();
+  if (d !== lastDrive) { fx.shaper.curve = driveCurve(d); lastDrive = d; }
+  const dm = Math.min(1, d * 3);
+  fx.distDry.gain.setTargetAtTime(1 - dm, t, k);
+  fx.distWet.gain.setTargetAtTime(dm * .5, t, k);
+
+  const c = CRUSH;
+  if (fx.crusher) {
+    fx.crusher.parameters.get('bits').setTargetAtTime(16 - c * 14, t, k);
+    fx.crusher.parameters.get('down').setTargetAtTime(1 + c * c * 40, t, k);
+    const cm = Math.min(1, c * 3);
+    fx.crushDry.gain.setTargetAtTime(1 - cm, t, k);
+    fx.crushWet.gain.setTargetAtTime(cm, t, k);
+  }
+
+  const ph = P.phaser();
+  fx.phLfo.frequency.setTargetAtTime(.08 + ph * 1.5, t, k);
+  fx.phDepth.gain.setTargetAtTime(1200 + ph * 2400, t, k);
+  fx.phFb.gain.setTargetAtTime(ph * .7, t, k);
+  fx.phWet.gain.setTargetAtTime(ph, t, k);
+  fx.phDry.gain.setTargetAtTime(1 - ph * .5, t, k);
+
+  fx.fbL.gain.setTargetAtTime(P.dfb(), t, k);
+  fx.fbR.gain.setTargetAtTime(P.dfb(), t, k);
+  fx.dWet.gain.setTargetAtTime(P.dmix(), t, k);
+
+  const v = P.volume();
+  fx.master.gain.setTargetAtTime(v * v * 1.6, t, k);
+}
+
+// ============================================================
+// LFO: sine / square / sawtooth / sh (sample & hold)
+// ============================================================
+function makeLFO(v, spec, t, min = 1){
+  const shape = R(spec.shape);
+  const rate = clamp(R(spec.rate), min, 100);
+  let node, param, scale;
+  if (shape === 'sh') {
+    node = ctx.createBufferSource(); node.buffer = shBuf; node.loop = true;
+    scale = 1 / SH_STEPS; param = node.playbackRate;
+    node.playbackRate.value = rate * scale;
+    node.start(t, Math.random());
+  } else {
+    node = ctx.createOscillator(); node.type = shape;
+    scale = 1; param = node.frequency; node.frequency.value = rate;
+    node.start(t);
+  }
+  v.nodes.push(node); v.srcs.push(node);
+  // 発音中も周期がふらつく
+  v.mods.push({ w: W(Math.log(rate), .12, .6), fn: (x, now) => param.setTargetAtTime(clamp(Math.exp(x), min, 100) * scale, now, .1) });
+  return node;
+}
+// LFO → depth(Gain) → 行き先。深さも発音中に揺らす
+function lfoTo(v, spec, t, targets, depthScale = 1, min = 1){
+  const lfo = makeLFO(v, spec, t, min);
+  const depth = R(spec.depth) * depthScale;
+  const g = gainNode(depth); v.nodes.push(g);
+  lfo.connect(g);
+  for (const p of targets) g.connect(p);
+  v.mods.push({ w: W(depth, Math.abs(depth) * .12 + 1e-6, .6), fn: (x, now) => g.gain.setTargetAtTime(x, now, .1) });
+  return g;
+}
+
+// ============================================================
+// Voice
+// ============================================================
+function noteOn(pad){
+  const Pt = PATCHES[pad], t = ctx.currentTime;
+  const v = { pad, patch: Pt, nodes: [], srcs: [], mods: [], karplus: [], grains: [], released: false, endAt: Infinity };
+  const N = n => (v.nodes.push(n), n);
+  const S = s => (v.srcs.push(s), s.start(t), s);
+
+  v.root = C0 * Math.pow(2, R(Pt.root || [0, 12]) / 12);
+
+  // 音程CV (cent)。ドリフト + ランダムウォーク / アルペジオ を全オシレータの detune に足す
+  v.pitchCV = N(ctx.createConstantSource()); v.pitchCV.offset.value = 0; S(v.pitchCV);
+  v.arpCV = N(ctx.createConstantSource()); v.arpCV.offset.value = 0; S(v.arpCV);
+  const d = Pt.drift || {};
+  const r = Math.random();
+  v.driftDir = r < (d.up || 0) ? 1 : r < (d.up || 0) + (d.down || 0) ? -1 : 0;
+  v.driftRate = R(d.rate || [0, 0]);
+  v.driftMax = d.max || 1200;
+  v.pitch = 0;
+  v.pitchWalk = W(0, R([3, 12]), 2);
+  v.arpNow = 0;
+
+  // VCF
+  const F = Pt.filter;
+  const ftype = R(F.type);
+  const nF = Math.random() < (F.series || 0) ? 2 : 1;
+  v.filt = [];
+  v.cut = R(F.cut);
+  v.cutDir = Math.random() < (F.open ?? .5) ? 1 : -1;
+  v.cutRate = R(F.sweep || [0, 0]);
+  const q = R(F.q);
+  v.qWalk = W(q, q * .1, .8);
+  for (let i = 0; i < nF; i++) {
+    const bq = N(ctx.createBiquadFilter());
+    bq.type = ftype; bq.frequency.value = v.cut; bq.Q.value = q;
+    if (i) v.filt[i - 1].connect(bq);
+    v.filt.push(bq);
+  }
+  if (F.lfo) lfoTo(v, F.lfo, t, v.filt.map(b => b.detune));
+
+  // VCA
+  const level = (Pt.gain ?? 1) * (nF > 1 && ftype === 'lowpass' ? .5 : 1) * rnd(.8, 1.1);
+  v.amp = N(gainNode(level));
+  v.ampWalk = W(level, level * .08, 3);
+  v.vca = N(gainNode(0));
+  v.pan = N(ctx.createStereoPanner());
+  v.panWalk = W(rnd(-.6, .6), .25, .5);
+  v.filt[nF - 1].connect(v.amp).connect(v.vca).connect(v.pan).connect(voiceBus);
+  const input = v.filt[0];
+
+  for (const L of Pt.layers) {
+    const lvl = R(L.level ?? 1);
+    if (L.kind === 'osc') {
+      const count = Math.floor(R(L.count || 1));
+      const oct = R(L.oct || 1), spread = R(L.spread || 0);
+      const lg = N(gainNode(lvl / Math.sqrt(count) * .5));
+      lg.connect(input);
+      for (let k = 0; k < count; k++) {
+        const o = N(ctx.createOscillator());
+        o.type = R(L.wave);
+        o.frequency.value = v.root * oct;
+        // 複数本を少しずつずらしてモアレ / うなりを作る
+        const off = (count > 1 ? (k / (count - 1) - .5) * 2 * spread : 0) + gauss() * spread * .2;
+        o.detune.value = off;
+        v.pitchCV.connect(o.detune);
+        v.arpCV.connect(o.detune);
+        // オシレータごとに別の設定の LFO
+        if (L.lfo) lfoTo(v, L.lfo, t, [o.detune]);
+        v.mods.push({ w: W(off, spread * .15 + 1, .7), fn: (x, now) => o.detune.setTargetAtTime(x, now, .08) });
+        o.connect(lg);
+        S(o);
+      }
+    } else if (L.kind === 'noise') {
+      const src = N(ctx.createBufferSource());
+      src.buffer = noiseBuf; src.loop = true;
+      src.start(t, Math.random() * 2); v.srcs.push(src);
+      const base = lvl * .35;
+      const lg = N(gainNode(base));
+      src.connect(lg).connect(input);
+      // ノイズには音程がないので LFO は音量 (チョップ / トレモロ) にかける
+      if (L.lfo) lfoTo(v, L.lfo, t, [lg.gain], base);
+      v.mods.push({ w: W(base, base * .15, 1), fn: (x, now) => lg.gain.setTargetAtTime(Math.max(0, x), now, .08) });
+    } else if (L.kind === 'karplus') {
+      // ノイズ励起 → Delay(1/f) → LPF → feedback → Delay のくし形共鳴
+      const f = Math.min(300, v.root * R(L.oct || 4));
+      const src = N(ctx.createBufferSource());
+      src.buffer = noiseBuf; src.loop = true;
+      src.start(t, Math.random() * 2); v.srcs.push(src);
+      const exBase = R(L.excite);
+      const eg = N(gainNode(exBase));
+      const dl = N(ctx.createDelay(1));
+      dl.delayTime.value = 1 / f;
+      // lowpass の Q は dB 指定で、既定 1dB だと山が 1 を超えループが発散する。
+      // 山を消した上で、ループ内に tanh を置いて振幅の上限を保証する
+      const lp = N(ctx.createBiquadFilter()); lp.frequency.value = R(L.damp); lp.Q.value = -6;
+      const sat = N(ctx.createWaveShaper()); sat.curve = SAT_CURVE;
+      const fb = N(gainNode(R(L.fb)));
+      const lg = N(gainNode(lvl * .5));
+      src.connect(eg).connect(dl);
+      dl.connect(lp).connect(sat).connect(fb).connect(dl);
+      dl.connect(lg).connect(input);
+      if (L.lfo) lfoTo(v, L.lfo, t, [dl.delayTime], 1 / f / 1731);
+      const kp = { f, dl, eg, exBase, pluck: R(L.pluck || 0) };
+      v.karplus.push(kp);
+      // 初回の弾き
+      eg.gain.setValueAtTime(.8, t); eg.gain.setTargetAtTime(exBase, t + .004, .01);
+      v.mods.push({ w: W(fb.gain.value, .003, 1), fn: (x, now) => fb.gain.setTargetAtTime(clamp(x, 0, .997), now, .1) });
+      v.mods.push({ w: W(exBase, exBase * .3, 1), fn: x => { kp.exBase = Math.max(0, x); } });
+    } else if (L.kind === 'grain') {
+      const lg = N(gainNode(lvl));
+      lg.connect(input);
+      // テープの wow (遅い揺れ) と flutter (速い揺れ) を各粒の detune に配る
+      const wowG = lfoTo(v, { shape: 'sine', rate: L.wow.rate, depth: L.wow.depth }, t, [], 1, .05);
+      const flutG = lfoTo(v, { shape: ['sine', 'sh'], rate: L.flutter.rate, depth: L.flutter.depth }, t, [], 1, .05);
+      const g = { L, lg, wowG, flutG, next: t, dens: R(L.density), rate: R(L.rate || 1), spread: R(L.spread || 0) };
+      v.mods.push({ w: W(Math.log(g.dens), .25, .5), fn: x => { g.dens = Math.exp(x); } });
+      v.grains.push(g);
+    }
+  }
+
+  // アルペジエータ
+  if (Pt.arp && Math.random() < (Pt.arp.p ?? 1)) {
+    v.arp = { scale: SCALES[R(Pt.arp.scale)], range: Math.floor(R(Pt.arp.range || 2)), rate: R(Pt.arp.rate), next: t };
+    v.mods.push({ w: W(Math.log(v.arp.rate), .2, .5), fn: x => { v.arp.rate = clamp(Math.exp(x), 1, 30); } });
+  }
+
+  // エンベロープ (全体共通スライダ × 発音ごとのゆらぎ)
+  const a = P.attack() * rnd(.75, 1.3), dc = P.decay() * rnd(.75, 1.3);
+  const sus = R(Pt.sus || [.7, .9]);
+  const g = v.vca.gain;
+  g.setValueAtTime(0, t);
+  g.linearRampToValueAtTime(1, t + a);
+  g.setTargetAtTime(sus, t + a, dc / 3);
+
+  voices.push(v);
+  // 同時発音が溜まりすぎたら、リリース中の古いものから捨てる
+  while (voices.length > 40) {
+    const old = voices.find(x => x.released) || voices[0];
+    dispose(old);
+  }
+  return v;
+}
+
+function noteOff(pad){
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  for (const v of voices) {
+    if (v.pad !== pad || v.released) continue;
+    v.released = true;
+    const rel = P.release() * rnd(.75, 1.3);
+    const g = v.vca.gain;
+    if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(t);
+    else { const cur = g.value; g.cancelScheduledValues(t); g.setValueAtTime(cur, t); }
+    g.setTargetAtTime(0, t, rel / 6);
+    v.endAt = t + rel + .05;
+  }
+}
+
+function dispose(v){
+  const i = voices.indexOf(v);
+  if (i >= 0) voices.splice(i, 1);
+  for (const s of v.srcs) { try { s.stop(); } catch (e) {} }
+  for (const n of v.nodes) { try { n.disconnect(); } catch (e) {} }
+}
+
+function spawnGrain(v, g, at){
+  const L = g.L;
+  const dur = R(L.dur) * rnd(.7, 1.3);
+  const s = ctx.createBufferSource();
+  s.buffer = Math.random() < L.rev ? tapeRevBuf : tapeBuf;
+  s.playbackRate.value = g.rate;
+  s.detune.value = gauss() * g.spread;
+  const env = ctx.createGain();
+  const amp = Math.min(1, 1.2 / Math.sqrt(Math.max(1, g.dens * dur)));
+  env.gain.setValueAtTime(0, at);
+  env.gain.linearRampToValueAtTime(amp, at + dur * .4);
+  env.gain.linearRampToValueAtTime(0, at + dur);
+  const params = [v.pitchCV, v.arpCV, g.wowG, g.flutG];
+  for (const p of params) p.connect(s.detune);
+  s.connect(env).connect(g.lg);
+  s.start(at, Math.random() * (s.buffer.duration - dur * 2 - .05), dur + .02);
+  s.onended = () => {
+    for (const p of params) { try { p.disconnect(s.detune); } catch (e) {} }
+    try { s.disconnect(); env.disconnect(); } catch (e) {}
+  };
+}
+
+// ============================================================
+// 変調ループ (30ms): ドリフト、フィルタスイープ、ランダムウォーク、アルペジオ、粒
+// ============================================================
+function tick(){
+  const now = ctx.currentTime;
+  const dt = clamp(now - lastTick, .001, .1);
+  lastTick = now;
+  const ahead = now + .1;
+  const transpose = P.pitch() * 100;   // pitch つまみ。発音中の全ボイスに足す (cent)
+
+  for (const v of voices.slice()) {
+    if (v.released && now >= v.endAt) { dispose(v); continue; }
+
+    // 緩やかな上昇 / 下降。上限で折り返す
+    v.pitch += v.driftDir * v.driftRate * dt;
+    if (Math.abs(v.pitch) > v.driftMax) { v.pitch = clamp(v.pitch, -v.driftMax, v.driftMax); v.driftDir *= -1; }
+    const cents = v.pitch + v.pitchWalk.step(dt) + transpose;
+    v.cents = cents;
+    v.pitchCV.offset.setTargetAtTime(cents, now, .05);
+
+    // フィルタが開く / 閉じる。端で折り返す
+    v.cut *= Math.pow(2, v.cutDir * v.cutRate * dt + gauss() * .08 * Math.sqrt(dt));
+    if (v.cut > 12000) { v.cut = 12000; v.cutDir = -1; }
+    if (v.cut < 40) { v.cut = 40; v.cutDir = 1; }
+    const q = Math.max(.1, v.qWalk.step(dt));
+    for (const bq of v.filt) { bq.frequency.setTargetAtTime(v.cut, now, .05); bq.Q.setTargetAtTime(q, now, .1); }
+
+    v.amp.gain.setTargetAtTime(Math.max(0, v.ampWalk.step(dt)), now, .08);
+    v.pan.pan.setTargetAtTime(clamp(v.panWalk.step(dt), -1, 1), now, .1);
+    for (const m of v.mods) m.fn(m.w.step(dt), now);
+
+    if (v.arp) {
+      while (v.arp.next < ahead) {
+        const at = Math.max(v.arp.next, now);
+        const deg = R(v.arp.scale) + 12 * Math.floor(Math.random() * v.arp.range);
+        v.arpCV.offset.setValueAtTime(deg * 100, at);
+        v.arpNow = deg * 100;
+        v.arp.next = at + rnd(.6, 1.4) / v.arp.rate;
+      }
+    }
+
+    for (const kp of v.karplus) {
+      const f = kp.f * Math.pow(2, (cents + v.arpNow) / 1200);
+      kp.dl.delayTime.setTargetAtTime(clamp(1 / f, .0005, 1), now, .02);
+      if (kp.pluck && Math.random() < kp.pluck * dt) {
+        kp.eg.gain.setValueAtTime(rnd(.3, .9), now);
+        kp.eg.gain.setTargetAtTime(kp.exBase, now + .004, .01);
+      } else {
+        kp.eg.gain.setTargetAtTime(kp.exBase, now, .05);
+      }
+    }
+
+    for (const g of v.grains) {
+      if (g.next < now) g.next = now;
+      while (g.next < ahead) {
+        spawnGrain(v, g, g.next);
+        g.next += rnd(.3, 1.7) / clamp(g.dens, .5, 80);
+      }
+    }
+  }
+
+  // ディレイタイムもわずかに揺らしてテープっぽくする
+  const dtm = P.dtime();
+  fx.dL.delayTime.setTargetAtTime(dtm * (1 + fx.dWalkL.step(dt)), now, .2);
+  fx.dR.delayTime.setTargetAtTime(dtm * .62 * (1 + fx.dWalkR.step(dt)), now, .2);
+}
+
+// ============================================================
+// 入力層
+//   押下元 (ptr:<id> / key:<code> / midi:<key>) ごとに保持し、どれか1つでも押されていれば鳴らす。
+// ============================================================
+const holds = Array.from({ length: 16 }, () => new Set());
+// MIDI learn の状態。learning 中はパッド / スライダを押すと割当先の選択になる
+let learning = false, selected = null;
+const padEls = [];
+
+function press(pad, src){
+  const h = holds[pad];
+  if (h.has(src)) return;
+  h.add(src);
+  if (h.size === 1) {
+    // 初回は AudioContext 生成で待たされることがあるので、点灯を先に出す
+    padEls[pad].setAttribute('aria-pressed', 'true');
+    if (ensureAudio()) noteOn(pad);
+  }
+}
+function release(pad, src){
+  const h = holds[pad];
+  if (!h.delete(src)) return;
+  if (h.size === 0) {
+    noteOff(pad);
+    padEls[pad].setAttribute('aria-pressed', 'false');
+  }
+}
+function releaseAll(){
+  holds.forEach((h, pad) => { for (const s of [...h]) release(pad, s); });
+}
+
+const grid = $('grid');
+PATCHES.forEach((p, i) => {
+  const b = document.createElement('button');
+  b.className = 'pad';
+  b.dataset.pad = i;
+  b.setAttribute('aria-pressed', 'false');
+  b.setAttribute('aria-label', p.name);
+  b.innerHTML = `<span class="no">${String(i + 1).padStart(2, '0')}</span><span class="key">${KEY_LABEL[i]}</span><span class="midi-badge"></span><span class="nm"></span>`;
+  b.querySelector('.nm').textContent = p.name;
+  const src = e => 'ptr:' + e.pointerId;
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (learning) { selectTarget('pad:' + i); return; }
+    try { b.setPointerCapture(e.pointerId); } catch (err) {}
+    press(i, src(e));
+  });
+  for (const type of ['pointerup', 'pointercancel', 'lostpointercapture']) b.addEventListener(type, e => release(i, src(e)));
+  b.addEventListener('contextmenu', e => e.preventDefault());
+  grid.appendChild(b);
+  padEls.push(b);
+});
+
+window.addEventListener('keydown', e => {
+  // learn 中は演奏せず、Esc で抜ける / Delete で選択中の割当を外す
+  if (learning) {
+    if (e.code === 'Escape') { e.preventDefault(); setLearning(false); }
+    else if ((e.code === 'Delete' || e.code === 'Backspace') && selected) { e.preventDefault(); unassign(selected); }
+    return;
+  }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const i = KEYS.indexOf(e.code);
+  if (i < 0) return;
+  e.preventDefault();
+  if (!e.repeat) press(i, 'key:' + e.code);
+});
+window.addEventListener('keyup', e => {
+  const i = KEYS.indexOf(e.code);
+  if (i >= 0) release(i, 'key:' + e.code);
+});
+// フォーカスを失うと keyup / pointerup が届かず鳴りっぱなしになるので全部離す
+window.addEventListener('blur', releaseAll);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+
+// ============================================================
+// MIDI learn
+//   key: note:<ch>:<num> / cc:<ch>:<num> (入力デバイスは区別しない)
+//   target: pad:<0-15> / slider:<input id>。1 target に 1 key、1 key に 1 target
+// ============================================================
+const MIDI_STORE = 'stair-one.midi.v1';
+const midiLearnBtn = $('midiLearn'), midiClearBtn = $('midiClear'), midiStatus = $('midiStatus');
+let midiAccess = null, midiRequest = null;
+
+function targetEl(target){
+  const [kind, id] = target.split(':');
+  if (kind === 'pad') return padEls[+id] || null;
+  const input = kind === 'slider' ? $(id) : null;
+  return input ? input.closest('.ctl') : null;
+}
+function loadMidiMap(){
+  try {
+    const o = JSON.parse(localStorage.getItem(MIDI_STORE) || '{}');
+    const map = {};
+    for (const [k, t] of Object.entries((o && o.map) || {})) if (typeof t === 'string' && targetEl(t)) map[k] = t;
+    return map;
+  } catch (e) { return {}; }
+}
+function saveMidiMap(){
+  try { localStorage.setItem(MIDI_STORE, JSON.stringify({ map: midiMap })); } catch (e) {}
+}
+const keyLabel = key => {
+  const [type, ch, num] = key.split(':');
+  return (type === 'note' ? 'N' : 'CC') + num + (ch !== '1' ? ` ch${ch}` : '');
+};
+
+// つまみにもバッジを置き、learn 中はラベルごと選べるようにする
+for (const input of document.querySelectorAll('.controls input[type=range]')) {
+  const ctl = input.closest('.ctl');
+  const badge = document.createElement('span');
+  badge.className = 'midi-badge';
+  ctl.appendChild(badge);
+  ctl.addEventListener('pointerdown', e => {
+    if (!learning) return;
+    e.preventDefault();
+    selectTarget('slider:' + input.id);
+  });
+}
+
+let midiMap = loadMidiMap();
+
+function renderBadges(){
+  document.querySelectorAll('.midi-badge').forEach(b => { b.textContent = ''; });
+  for (const [key, target] of Object.entries(midiMap)) {
+    const badge = targetEl(target)?.querySelector('.midi-badge');
+    if (badge) badge.textContent = keyLabel(key);
+  }
+}
+function assign(key, target){
+  for (const [k, t] of Object.entries(midiMap)) if (t === target) delete midiMap[k];
+  midiMap[key] = target;
+  saveMidiMap(); renderBadges();
+}
+function unassign(target){
+  for (const [k, t] of Object.entries(midiMap)) if (t === target) delete midiMap[k];
+  saveMidiMap(); renderBadges();
+}
+function selectTarget(target){
+  if (selected) targetEl(selected)?.classList.remove('learn-sel');
+  selected = target;
+  if (target) targetEl(target)?.classList.add('learn-sel');
+}
+function setLearning(on){
+  learning = on;
+  document.body.classList.toggle('learning', on);
+  midiLearnBtn.setAttribute('aria-pressed', String(on));
+  midiClearBtn.hidden = !on;
+  if (on) releaseAll(); else selectTarget(null);
+}
+function setStatus(text, warn = false){
+  midiStatus.textContent = text;
+  midiStatus.classList.toggle('warn', warn);
+}
+
+function attachInputs(){
+  let n = 0;
+  for (const input of midiAccess.inputs.values()) {
+    if (input.state === 'disconnected') continue;
+    input.onmidimessage = onMidi;   // 代入でポートが開く
+    n++;
+  }
+  setStatus(n ? `MIDI ${n} in` : 'no MIDI input');
+}
+function requestMidi(){
+  if (midiRequest || !navigator.requestMIDIAccess) return;
+  midiRequest = navigator.requestMIDIAccess().then(access => {
+    midiAccess = access;
+    access.onstatechange = e => {
+      attachInputs();
+      // 抜かれたデバイスの note off は届かないので、MIDI 由来の押下を全部離す
+      if (e.port && e.port.type === 'input' && e.port.state === 'disconnected') {
+        holds.forEach((h, pad) => { for (const s of [...h]) if (s.startsWith('midi:')) release(pad, s); });
+      }
+    };
+    attachInputs();
+  }).catch(() => { midiRequest = null; setStatus('MIDI denied', true); });
+}
+
+function onMidi(e){
+  const [st, d1, d2 = 0] = e.data;
+  const type = st & 0xf0, ch = (st & 0x0f) + 1;
+  let key, on, value;
+  if (type === 0x90 || type === 0x80) { key = `note:${ch}:${d1}`; on = type === 0x90 && d2 > 0; }
+  else if (type === 0xb0) { key = `cc:${ch}:${d1}`; value = d2; on = d2 >= 64; }
+  else return;
+
+  if (learning) {
+    if (!selected) return;
+    const isCC = type === 0xb0;
+    if (!isCC && !on) return;                              // note off では割り当てない
+    if (selected.startsWith('slider:') && !isCC) return;  // スライダは CC のみ
+    assign(key, selected);
+    selectTarget(null);
+    return;
+  }
+
+  const target = midiMap[key];
+  if (!target) return;
+  // MIDI 入力はユーザー操作扱いにならず、音声を解錠できない
+  if (!ctx || ctx.state !== 'running') setStatus('click to enable sound', true);
+  else if (midiStatus.classList.contains('warn')) attachInputs();
+
+  const [kind, id] = target.split(':');
+  if (kind === 'pad') {
+    if (on) press(+id, 'midi:' + key); else release(+id, 'midi:' + key);
+  } else if (value !== undefined) {
+    const input = $(id);
+    const min = +input.min, max = +input.max;
+    input.value = String(Math.round(min + (max - min) * value / 127));
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+}
+
+if (navigator.requestMIDIAccess) {
+  midiLearnBtn.addEventListener('click', () => {
+    ensureAudio();   // ボタン押下はユーザー操作なので、ここで音声も解錠しておく
+    requestMidi();
+    setLearning(!learning);
+  });
+  midiClearBtn.addEventListener('click', () => {
+    midiMap = {};
+    saveMidiMap(); renderBadges(); selectTarget(null);
+  });
+  // 保存済みの割当があれば、learn を押さなくても MIDI で弾けるようにする
+  if (Object.keys(midiMap).length) requestMidi();
+} else {
+  midiLearnBtn.disabled = true;
+  midiLearnBtn.title = 'このブラウザは Web MIDI 非対応 / Web MIDI is not supported';
+}
+renderBadges();
+
+// MIDI だけで弾き始めると音が出ないので、ページ上の最初の操作で音声を解錠する
+// パッド・learn ボタン・演奏キーは自前で解錠するので除外し、1回の操作で初期化を重ねない
+const unlockAudio = e => {
+  if (e.target instanceof Element && e.target.closest('.pad, #midiLearn')) return;
+  if (e.type === 'keydown' && KEYS.includes(e.code)) return;
+  if (!ctx || ctx.state !== 'running') ensureAudio();
+};
+document.addEventListener('pointerdown', unlockAudio);
+document.addEventListener('keydown', unlockAudio);
+
+// 外部入力とテストから使う口
+window.stair = {
+  press, release, releaseAll,
+  midiMap: () => ({ ...midiMap }),
+  voiceCount: () => voices.length,
+  debug: () => voices.map(v => ({ pad: v.pad, root: v.root, cut: v.cut, pitch: v.pitch, cents: v.cents ?? 0, cv: v.pitchCV.offset.value, delay: v.karplus[0]?.dl.delayTime.value, driftDir: v.driftDir, released: v.released })),
+};
+})();
+</script>
+</body>
+</html>
