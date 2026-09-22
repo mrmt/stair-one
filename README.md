@@ -69,6 +69,20 @@
 
 bitcrush はつまみを持たず、常に軽くかかっている。
 
+## AU 版 (Logic Pro など)
+
+自分の Mac 用。Xcode (コマンドラインツール)・cmake・rustup が要る。JUCE は初回のビルドで自動で取ってくる。
+
+```sh
+make au-install      # ビルド → ~/Library/Audio/Plug-Ins/{Components,VST3} に入れる → auval で確認
+```
+
+- Logic では「ソフトウェア音源 → AU 音源 → mrmt → Stair One」
+- MIDI ノート 36–51 (Logic 表記 C1–D#2) がパッド 1–16。ベロシティは使わない
+- つまみはすべてホストのオートメーション対象。値はプロジェクトに保存される
+- 画面は Web 版と同じ。プラグインの中では MIDI learn とキーボード演奏を出さない (MIDI はホストから来る)
+- 音は Web 版と同じエンジン (`engine/`)。wasm とネイティブは 1 サンプル単位で同じ出力になる
+
 ## 開発
 
 ```sh

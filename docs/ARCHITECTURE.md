@@ -16,6 +16,25 @@ index.html (UI, 入力層, MIDI learn)
   パッド名とつまみ定義を `const META` に書き込む。`--check` は CI 用
 - `tools/legacy-index.html`: 移植前の Web Audio 版 (v0.1)。`tools/capture-legacy.mjs` と `tools/parity.mjs` が比較に使う
 
+## AU 版 (`au/`)
+
+JUCE 8 の薄い殻。音は `engine/ffi` を arm64 + x86_64 の staticlib にして (`make au-ffi`) リンクし、`stair_render` を呼ぶ。
+
+```
+ホスト (Logic) ── MIDI / オートメーション ──→ StairProcessor (au/src/Processor.cpp) ── stair_* ──→ engine/core
+                                                  ↑↓ イベント 'stair' (JUCE native integration)
+                                               StairEditor: WebBrowserComponent に index.html (BinaryData)
+```
+
+- MIDI はサンプル位置で区切って反映。ノート 36–51 → パッド 0–15、All Notes Off で全部離す
+- パッドの押下元はホストの MIDI と画面の2つ。どちらかが押していれば鳴る (`setPad`)
+- つまみは `stair_param_def` から `AudioParameterFloat` を作る (id は `params.rs` の id)。状態は id → 値の XML
+- 画面 → ホスト: `{t:'ready'}` / `{t:'on'|'off', pad}` / `{t:'param', i, v}`。
+  ホスト → 画面 (30Hz): `{t:'param', i, v}` (値が変わったものだけ) / `{t:'held', mask}`
+- `index.html` は `window.__JUCE__` があればプラグインの中とみなす (`HOST`)。
+  AudioContext を作らず、MIDI learn・キーボード演奏・ページ移動のリンクを隠す
+- `au/test/render.swift`: インストール済みの AU を AVAudioEngine のオフライン描画で鳴らし、離すと止まるかを見る
+
 つまみの `id` (`params.rs`) は AU のパラメータ ID にもなるので、変更・削除しない (追加のみ)。
 HTML の `<input>` の min / max / step / value は `META.params` と一致している必要がある (`tests/interaction.spec.js` が確認)。
 
@@ -152,6 +171,7 @@ Set が空→非空で noteOn、非空→空で noteOff。押下元が違えば�
 | `tools/wasm-check.mjs` | wasm とネイティブの出力が 1 サンプル単位で一致する |
 | `tools/parity.mjs` | 部品単位で Chromium (OfflineAudioContext) と一致する |
 | `scripts/build-web.sh --check` | `index.html` の埋め込みが `engine/` と一致する |
+| `make au-install` の `auval` / `swift au/test/render.swift N` | AU の検証、インストールした AU が鳴って止まる |
 
 `tests/helpers/audio.js` (elevator-one 由来) が `AudioNode.prototype.connect` を包み、destination 手前に AnalyserNode を挟む。
 

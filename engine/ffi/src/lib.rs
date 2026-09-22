@@ -121,3 +121,33 @@ pub extern "C" fn stair_param_count() -> u32 {
 pub extern "C" fn stair_max_block() -> u32 {
     MAX_BLOCK as u32
 }
+
+/// つまみ idx の定義。id と表示名は buf に NUL 終端で書く (足りなければ切り詰める)。idx が範囲外なら 0 を返す
+///
+/// # Safety
+/// id / label は それぞれ cap バイト書ける領域、min / max / step / default は f64 1つ分を書ける領域であること
+#[no_mangle]
+pub unsafe extern "C" fn stair_param_def(
+    idx: u32,
+    id: *mut u8,
+    label: *mut u8,
+    cap: u32,
+    min: *mut f64,
+    max: *mut f64,
+    step: *mut f64,
+    default: *mut f64,
+) -> u32 {
+    let Some(d) = PARAMS.get(idx as usize) else { return 0 };
+    let put = |dst: *mut u8, s: &str| {
+        let n = s.len().min(cap as usize - 1);
+        std::ptr::copy_nonoverlapping(s.as_ptr(), dst, n);
+        *dst.add(n) = 0;
+    };
+    put(id, d.id);
+    put(label, d.label);
+    *min = d.min;
+    *max = d.max;
+    *step = d.step;
+    *default = d.default;
+    1
+}
