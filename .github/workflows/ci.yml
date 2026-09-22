@@ -65,6 +65,14 @@ jobs:
       - name: index.html の埋め込みが最新か
         run: scripts/build-web.sh --check
 
+      # 埋め込みと食い違ったとき、手元のビルドと比べられるように残す
+      - if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: stair-ffi-wasm
+          path: engine/target/wasm32-unknown-unknown/release/stair_ffi.wasm
+          retention-days: 7
+
       - name: wasm とネイティブが一致するか
         run: node tools/wasm-check.mjs
 
