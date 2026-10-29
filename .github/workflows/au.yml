@@ -19,11 +19,11 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5.1.0
         with:
           fetch-depth: 0   # バージョンを au-v* タグから取る
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5.0.0
         with:
           node-version: 22
 
@@ -32,7 +32,7 @@ jobs:
         working-directory: engine
         run: rustup show
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
         with:
           workspaces: engine
 
@@ -49,7 +49,7 @@ jobs:
       - name: 鳴って止まるか
         run: for p in 1 9 16; do swift au/test/render.swift $p; done
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v5.0.0
         with:
           name: stair-one-plugins
           path: au/build/dist/*.zip
